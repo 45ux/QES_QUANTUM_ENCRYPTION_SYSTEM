@@ -3384,18 +3384,18 @@ public class MainActivity extends Activity {
                 if (tx != null) {
                     String norm = qesNormalizeUiText(String.valueOf(tx));
                     if (
-                        "PREHLED".equals(norm) ||
-                        "KLIC".equals(norm) ||
+                        "PŘEHLED".equals(norm) ||
+                        "KLÍČ".equals(norm) ||
                         "ART".equals(norm) ||
                         "TEXT".equals(norm) ||
                         "SOUBOR".equals(norm) ||
                         "COVER".equals(norm) ||
-                        "OVERENI".equals(norm) ||
+                        "OVĚŘENÍ".equals(norm) ||
                         "TESTY".equals(norm) ||
                         "LOG".equals(norm) ||
                         "ARCH".equals(norm) ||
                         "ZERO".equals(norm) ||
-                        "NASTAVENI".equals(norm) ||
+                        "NASTAVENÍ".equals(norm) ||
                         norm.contains("MAC ZERO")
                     ) {
                         tv.setTextColor(android.graphics.Color.rgb(112, 255, 240));
