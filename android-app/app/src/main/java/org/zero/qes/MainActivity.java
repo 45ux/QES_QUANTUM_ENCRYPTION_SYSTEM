@@ -94,6 +94,31 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
+    private final String appVersion = "0.11.0-alpha";
+    private final String patchVersion = "P-2026-05-31-02";
+    private final String buildStage = "QES ALFA PROTOTYP";
+
+    private String appMode = "NORMÁLNÍ";
+    private String uiMode = "STANDARD";
+    private String testMode = "STANDARDNÍ";
+    private String cryptoProfile = "QES CORE";
+    private String aesMode = "AES-GCM";
+    private String compressionMode = "VYPNUTO";
+
+    private boolean requirePassword = true;
+    private boolean requireMainSeed = true;
+    private boolean requireMac = true;
+    private boolean stopOnMacError = true;
+    private boolean allowDemoPassword = false;
+
+    private boolean outputMacReport = true;
+    private boolean outputCapsule = true;
+    private boolean outputPublicHash = true;
+    private boolean outputLog = true;
+
+    private boolean artAsNavigation = true;
+    private boolean artSaveToCapsule = true;
+
     private final StringBuilder log = new StringBuilder();
 
     private int BG, PANEL, CARD, FIELD, TEXT, MUTED, ACCENT, ACCENT2, GOOD, BAD;
@@ -161,7 +186,7 @@ public class MainActivity extends Activity {
         head.addView(theme);
 
         root.addView(head);
-        root.addView(text("Quantum Encryption System · APK · ZERO", 13, MUTED, false));
+        root.addView(text("Quantum Encryption System · " + buildStage + " · v" + appVersion + " · ZERO", 13, MUTED, false));
         root.addView(space(12));
         root.addView(nav());
 
@@ -200,7 +225,7 @@ public class MainActivity extends Activity {
         r3.addView(navButton("ARCH", "arch"));
         r3.addView(navButton("LOG", "log"));
         r3.addView(navButton("MAC", "mac"));
-        r3.addView(navButton("ZERO", "zero"));
+        r3.addView(navButton("NASTAVENÍ", "zero"));
 
         box.addView(r1);
         box.addView(r2);
@@ -256,9 +281,9 @@ public class MainActivity extends Activity {
     private void showOverview() {
         clear();
         currentPage = "overview";
-        hero("QES CONTROL DECK",
-                "Finálně pojatá APK verze. Každý režim má vlastní stránku. Text, soubor, cover, ověření, testy, logy, MAC a architektura jsou oddělené tak, aby aplikace působila přehledně i technicky.");
-        metrics("REŽIM", "APK", "CORE", "RUST JNI", "MOTIV", dark ? "DARK" : "LIGHT");
+        hero("QES ALFA CONTROL DECK",
+                "QES ALFA PROTOTYP v" + appVersion + " · patch " + patchVersion + "\n\nFinálně pojatá APK verze. Každý režim má vlastní stránku. Text, soubor, cover, ověření, testy, logy, MAC a architektura jsou oddělené tak, aby aplikace působila přehledně i technicky.");
+        metrics("VERZE", appVersion, "CORE", "RUST JNI", "PATCH", patchVersion);
         card("Funkční vrstvy",
                 "• dynamické seedy: základní seed + libovolné další seedy\n• ASCII art profily jako volitelné dlaždice\n• textové šifrování a dešifrování\n• souborové šifrování a dešifrování\n• cover carrier s payloadem\n• MAC report pro text, soubor i cover\n• ověření podle hash/MAC\n• diagnostika a uložitelný log");
         card("Bezpečnostní rámec",
@@ -482,10 +507,179 @@ public class MainActivity extends Activity {
     private void showZero() {
         clear();
         currentPage = "zero";
-        section("ZERO");
-        card("ZERO SIGNATURE",
-                "QES · Quantum Encryption System\nZERO interface\nSymmetric control deck\nNative Android APK\nRust core bridge");
-        metrics("ART", artProfile, "SEEDS", String.valueOf(1 + countExtraSeeds()), "MODE", dark ? "DARK" : "LIGHT");
+        section("NASTAVENÍ / SYSTEM CONTROL");
+
+        card("Verze aplikace",
+                buildStage +
+                "\nVerze: " + appVersion +
+                "\nPatch: " + patchVersion +
+                "\nBuild: debug APK / GitHub Actions" +
+                "\nRust core: " + rustStatusQuiet() +
+                "\nJNI bridge: aktivní");
+
+        metrics("APP", appMode, "UI", uiMode, "TEST", testMode);
+        metrics("CRYPTO", cryptoProfile, "AES", aesMode, "KOMPRESE", compressionMode);
+
+        card("Režim aplikace",
+                "Normální režim = jednoduché ovládání.\nExperimentální režim = cover, capsule, ART, MAC, těžké testy.\nVývojářský režim = detailní logy a interní diagnostika.");
+
+        LinearLayout modeRow = row();
+        modeRow.addView(action("NORMÁLNÍ", v -> setAppMode("NORMÁLNÍ")));
+        modeRow.addView(action("EXPERIMENT", v -> setAppMode("EXPERIMENTÁLNÍ")));
+        content.addView(modeRow);
+        content.addView(action("VÝVOJÁŘSKÝ REŽIM", v -> setAppMode("VÝVOJÁŘSKÝ")));
+
+        card("Vzhled",
+                "Tmavý / světlý motiv je aktivní.\nVysoký kontrast a kompaktní rozložení jsou připravené jako UI profil.");
+
+        LinearLayout uiRow = row();
+        uiRow.addView(action(dark ? "PŘEPNOUT NA SVĚTLÝ" : "PŘEPNOUT NA TMAVÝ", v -> {
+            dark = !dark;
+            addLog("Nastavení: přepnut motiv.");
+            setContentView(app());
+            showZero();
+        }));
+        uiRow.addView(action("UI PROFIL", v -> cycleUiMode()));
+        content.addView(uiRow);
+
+        card("Bezpečnost",
+                "Vyžadovat heslo: " + on(requirePassword) +
+                "\nVyžadovat hlavní seed: " + on(requireMainSeed) +
+                "\nVyžadovat MAC/TAG: " + on(requireMac) +
+                "\nZastavit při chybě: " + on(stopOnMacError) +
+                "\nDemo heslo povoleno: " + on(allowDemoPassword));
+
+        LinearLayout secRow1 = row();
+        secRow1.addView(action("HESLO", v -> { requirePassword = !requirePassword; refreshSettings("requirePassword=" + requirePassword); }));
+        secRow1.addView(action("SEED", v -> { requireMainSeed = !requireMainSeed; refreshSettings("requireMainSeed=" + requireMainSeed); }));
+        content.addView(secRow1);
+
+        LinearLayout secRow2 = row();
+        secRow2.addView(action("MAC/TAG", v -> { requireMac = !requireMac; refreshSettings("requireMac=" + requireMac); }));
+        secRow2.addView(action("STOP ERROR", v -> { stopOnMacError = !stopOnMacError; refreshSettings("stopOnMacError=" + stopOnMacError); }));
+        content.addView(secRow2);
+
+        card("Výstupy po šifrování",
+                "MAC report: " + on(outputMacReport) +
+                "\nQES-128 kapsle: " + on(outputCapsule) +
+                "\nPublic hash: " + on(outputPublicHash) +
+                "\nLog: " + on(outputLog));
+
+        LinearLayout outRow1 = row();
+        outRow1.addView(action("MAC", v -> { outputMacReport = !outputMacReport; refreshSettings("outputMacReport=" + outputMacReport); }));
+        outRow1.addView(action("KAPSLE", v -> { outputCapsule = !outputCapsule; refreshSettings("outputCapsule=" + outputCapsule); }));
+        content.addView(outRow1);
+
+        LinearLayout outRow2 = row();
+        outRow2.addView(action("HASH", v -> { outputPublicHash = !outputPublicHash; refreshSettings("outputPublicHash=" + outputPublicHash); }));
+        outRow2.addView(action("LOG", v -> { outputLog = !outputLog; refreshSettings("outputLog=" + outputLog); }));
+        content.addView(outRow2);
+
+        card("ART / ASCII nastavení",
+                "ART jako navigace: " + on(artAsNavigation) +
+                "\nUložit ART profil do kapsle: " + on(artSaveToCapsule) +
+                "\nAktuální profil: " + artProfile +
+                "\n\nART už nemá být stránka pro heslo. Heslo patří do KLÍČE. ART je profil / dlaždice / navigační doplněk.");
+
+        LinearLayout artRow = row();
+        artRow.addView(action("ART NAV", v -> { artAsNavigation = !artAsNavigation; refreshSettings("artAsNavigation=" + artAsNavigation); }));
+        artRow.addView(action("ART KAPSLE", v -> { artSaveToCapsule = !artSaveToCapsule; refreshSettings("artSaveToCapsule=" + artSaveToCapsule); }));
+        content.addView(artRow);
+
+        card("Kryptografický profil",
+                "Aktivní jádro: QES CORE.\nAES a další šifry jsou zde jako volitelný profil pro další Rust patch. Nebudu tvrdit, že AES šifruje, dokud nebude napojený do core.");
+
+        LinearLayout cryptoRow = row();
+        cryptoRow.addView(action("CRYPTO PROFIL", v -> cycleCryptoProfile()));
+        cryptoRow.addView(action("AES MÓD", v -> cycleAesMode()));
+        content.addView(cryptoRow);
+
+        card("Komprese",
+                "Aktuální komprese: " + compressionMode +
+                "\nKomprese bude další vrstva před šifrováním. Pro ostré použití musí být přesně zapsaná v metadatech, aby šla data obnovit.");
+
+        content.addView(action("PŘEPNOUT KOMPRESI", v -> cycleCompression()));
+
+        card("Testy",
+                "Testovací režim: " + testMode +
+                "\nRychlé = funkčnost. Standardní = roundtrip + MAC. Těžké = statistické indikátory. Extrémní = dlouhé testy pro pozdější verzi.");
+
+        content.addView(action("PŘEPNOUT TESTY", v -> cycleTestMode()));
+
+        card("Reset / údržba",
+                "Resetuje jen lokální stav aplikace, neuložené výstupy a pracovní hodnoty.");
+
+        LinearLayout resetRow1 = row();
+        resetRow1.addView(action("RESET LOG", v -> clearLog()));
+        resetRow1.addView(action("RESET ART", v -> { artProfile = "ZERO GRID"; refreshSettings("ART reset"); }));
+        content.addView(resetRow1);
+
+        LinearLayout resetRow2 = row();
+        resetRow2.addView(action("RESET MAC", v -> { lastReport = ""; lastCapsule128 = null; lastMode = "NONE"; refreshSettings("MAC reset"); }));
+        resetRow2.addView(action("RESET NAVIGACE", v -> { pass = ""; baseSeed = "seed-main"; extraSeeds = ""; refreshSettings("Navigace reset"); }));
+        content.addView(resetRow2);
+    }
+
+    private String rustStatusQuiet() {
+        try {
+            String s = QesNative.selfTest();
+            return s == null || s.isEmpty() ? "OK" : "OK";
+        } catch (Throwable e) {
+            return "FAILED";
+        }
+    }
+
+    private String on(boolean value) {
+        return value ? "ON" : "OFF";
+    }
+
+    private void refreshSettings(String msg) {
+        addLog("Nastavení: " + msg);
+        setContentView(app());
+        showZero();
+    }
+
+    private void setAppMode(String mode) {
+        appMode = mode;
+        refreshSettings("appMode=" + mode);
+    }
+
+    private void cycleUiMode() {
+        if ("STANDARD".equals(uiMode)) uiMode = "VYSOKÝ KONTRAST";
+        else if ("VYSOKÝ KONTRAST".equals(uiMode)) uiMode = "KOMPAKTNÍ";
+        else uiMode = "STANDARD";
+        refreshSettings("uiMode=" + uiMode);
+    }
+
+    private void cycleTestMode() {
+        if ("RYCHLÉ".equals(testMode)) testMode = "STANDARDNÍ";
+        else if ("STANDARDNÍ".equals(testMode)) testMode = "TĚŽKÉ";
+        else if ("TĚŽKÉ".equals(testMode)) testMode = "EXTRÉMNÍ";
+        else testMode = "RYCHLÉ";
+        refreshSettings("testMode=" + testMode);
+    }
+
+    private void cycleCryptoProfile() {
+        if ("QES CORE".equals(cryptoProfile)) cryptoProfile = "AES";
+        else if ("AES".equals(cryptoProfile)) cryptoProfile = "CHACHA20-POLY1305";
+        else if ("CHACHA20-POLY1305".equals(cryptoProfile)) cryptoProfile = "HYBRID QES+AES";
+        else cryptoProfile = "QES CORE";
+        refreshSettings("cryptoProfile=" + cryptoProfile);
+    }
+
+    private void cycleAesMode() {
+        if ("AES-GCM".equals(aesMode)) aesMode = "AES-CTR";
+        else if ("AES-CTR".equals(aesMode)) aesMode = "AES-CBC COMPAT";
+        else aesMode = "AES-GCM";
+        refreshSettings("aesMode=" + aesMode);
+    }
+
+    private void cycleCompression() {
+        if ("VYPNUTO".equals(compressionMode)) compressionMode = "DEFLATE";
+        else if ("DEFLATE".equals(compressionMode)) compressionMode = "ZSTD PLÁN";
+        else if ("ZSTD PLÁN".equals(compressionMode)) compressionMode = "LZMA PLÁN";
+        else compressionMode = "VYPNUTO";
+        refreshSettings("compressionMode=" + compressionMode);
     }
 
     private void addKeyPanel(boolean compact) {
