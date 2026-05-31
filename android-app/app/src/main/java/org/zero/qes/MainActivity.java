@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.8-alpha";
-    private final String patchVersion = "P-2026-05-31-10";
+    private final String appVersion = "0.11.8a-alpha";
+    private final String patchVersion = "P-2026-05-31-10A";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1438,7 +1438,7 @@ public class MainActivity extends Activity {
                         "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac));
 
                 addLog("Stream encrypt done: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
-                runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + blockIndex));
+                final long finalBlockIndex = blockIndex;\n                runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + finalBlockIndex));
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
@@ -1555,7 +1555,7 @@ public class MainActivity extends Activity {
                         "\nVERIFY: OK";
 
                 addLog("Stream decrypt verified: blocks=" + blockIndex + ", plain=" + plainTotal + " B");
-                runOnUiThread(() -> status.setText("Stream dešifrování ověřeno. Bloků: " + blockIndex));
+                final long finalBlockIndexDecrypt = blockIndex;\n                runOnUiThread(() -> status.setText("Stream dešifrování ověřeno. Bloků: " + finalBlockIndexDecrypt));
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
