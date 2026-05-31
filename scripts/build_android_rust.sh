@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/../rust-core"
-if ! command -v cargo-ndk >/dev/null 2>&1; then
-  echo "Chybí cargo-ndk. Nainstaluj: cargo install cargo-ndk"
-  exit 1
-fi
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR/rust-core"
+
+echo "Budování QES Rust core pro Android arm64-v8a..."
+echo "Rust core složka: $(pwd)"
+
 rustup target add aarch64-linux-android
-cargo ndk -t arm64-v8a -o ../android-app/app/src/main/jniLibs build --release
+
+cargo ndk \
+  --target arm64-v8a \
+  --platform 26 \
+  --output-dir "$ROOT_DIR/android-app/app/src/main/jniLibs" \
+  build --release --lib
+
+echo "Hotovo. Rust knihovna:"
+find "$ROOT_DIR/android-app/app/src/main/jniLibs" -type f -name "*.so" -print
