@@ -94,8 +94,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.1-alpha";
-    private final String patchVersion = "P-2026-05-31-03";
+    private final String appVersion = "0.11.2-alpha";
+    private final String patchVersion = "P-2026-05-31-04";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -250,6 +250,17 @@ public class MainActivity extends Activity {
         p.setMargins(3, 3, 3, 3);
         b.setLayoutParams(p);
         return b;
+    }
+
+    private void refreshCurrentPageNoJump(String reason) {
+        addLog("UI refresh bez skoku: " + reason);
+        if (content != null) {
+            content.removeAllViews();
+            rebuildCurrentPage();
+        } else {
+            setContentView(app());
+            rebuildCurrentPage();
+        }
     }
 
     private void rebuildCurrentPage() {
@@ -635,8 +646,7 @@ public class MainActivity extends Activity {
 
     private void refreshSettings(String msg) {
         addLog("Nastavení: " + msg);
-        setContentView(app());
-        showZero();
+        refreshCurrentPageNoJump(msg);
     }
 
     private void setAppMode(String mode) {
@@ -724,15 +734,13 @@ public class MainActivity extends Activity {
         if (extraSeeds.trim().isEmpty()) extraSeeds = next;
         else extraSeeds = extraSeeds.trim() + "\n" + next;
         addLog("Přidán seed: " + next);
-        setContentView(app());
-        rebuildCurrentPage();
+        refreshCurrentPageNoJump("rebuild");
     }
 
     private void clearExtraSeeds() {
         extraSeeds = "";
         addLog("Další seedy vyčištěny.");
-        setContentView(app());
-        rebuildCurrentPage();
+        refreshCurrentPageNoJump("rebuild");
     }
 
     private int countExtraSeeds() {
@@ -815,8 +823,7 @@ public class MainActivity extends Activity {
             glyph = "#"; particleValue = 233; vector = "q-capsule"; phase = 128; amplitude = 64;
         }
         addLog("ART profil nastaven: " + profile);
-        setContentView(app());
-        showArt();
+        refreshCurrentPageNoJump("art");
     }
 
     private void randomArt() {
@@ -829,8 +836,7 @@ public class MainActivity extends Activity {
         amplitude = random.nextInt(256);
         artProfile = "RANDOM-" + shortHex(randomBytes(3));
         addLog("Náhodný ART profil: " + artProfile);
-        setContentView(app());
-        showArt();
+        refreshCurrentPageNoJump("art");
     }
 
     private String artPreview() {
@@ -1283,8 +1289,7 @@ public class MainActivity extends Activity {
     }
 
     private void rebuildVisible() {
-        setContentView(app());
-        rebuildCurrentPage();
+        refreshCurrentPageNoJump("rebuild");
     }
 
     private byte[] readAll(Uri uri) throws Exception {
