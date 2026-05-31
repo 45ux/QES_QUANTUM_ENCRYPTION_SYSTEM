@@ -10,6 +10,7 @@ import android.content.Context;
 import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -96,8 +97,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.3-alpha";
-    private final String patchVersion = "P-2026-05-31-05";
+    private final String appVersion = "0.11.4-alpha";
+    private final String patchVersion = "P-2026-05-31-06";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -106,6 +107,7 @@ public class MainActivity extends Activity {
     private String cryptoProfile = "QES CORE";
     private String aesMode = "AES-GCM";
     private String compressionMode = "VYPNUTO";
+    private String interfaceLanguage = "Čeština";
 
     private boolean requirePassword = true;
     private boolean requireMainSeed = true;
@@ -219,7 +221,7 @@ public class MainActivity extends Activity {
     private LinearLayout progressPanel() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(PANEL);
+        box.setBackground(box(cyanBackDeep(), seaGreen()));
         box.setPadding(12, 10, 12, 10);
 
         progressLabel = text((operationRunning ? "⟳ " : "● ") + progressPhase + " · " + progressPercent + "%", 12, operationRunning ? ACCENT : MUTED, true);
@@ -235,6 +237,9 @@ public class MainActivity extends Activity {
         progressBar.setLayoutParams(p);
         box.addView(progressBar);
 
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.setMargins(0, 8, 0, 10);
+        box.setLayoutParams(bp);
         return box;
     }
 
@@ -333,20 +338,24 @@ public class MainActivity extends Activity {
 
     private void controlTable(String title, String[][] rows) {
         TextView h = text(title, 13, ACCENT, true);
-        h.setLetterSpacing(0.08f);
-        h.setPadding(0, 18, 0, 6);
+        h.setLetterSpacing(0.10f);
+        h.setPadding(14, 12, 14, 12);
+        h.setBackground(box(cyanBackDeep(), seaGreen()));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hp.setMargins(0, 18, 0, 4);
+        h.setLayoutParams(hp);
         content.addView(h);
 
         LinearLayout table = new LinearLayout(this);
         table.setOrientation(LinearLayout.VERTICAL);
-        table.setBackgroundColor(Color.rgb(46, 139, 87));
-        table.setPadding(1, 1, 1, 1);
+        table.setBackgroundColor(seaGreen());
+        table.setPadding(borderPx(), borderPx(), borderPx(), borderPx());
 
         for (String[] row : rows) {
             LinearLayout r = new LinearLayout(this);
             r.setOrientation(LinearLayout.HORIZONTAL);
-            r.setBackgroundColor(Color.rgb(46, 139, 87));
-            r.setPadding(0, 0, 0, 1);
+            r.setBackgroundColor(seaGreen());
+            r.setPadding(0, 0, 0, borderPx());
 
             TextView left = tableCell(row.length > 0 ? row[0] : "", false);
             TextView right = tableCell(row.length > 1 ? row[1] : "", true);
@@ -364,18 +373,45 @@ public class MainActivity extends Activity {
 
     private TextView tableCell(String value, boolean strong) {
         TextView t = text(value, 13, strong ? ACCENT : TEXT, strong);
-        t.setBackgroundColor(CARD);
+        t.setBackgroundColor(cyanBack());
         t.setPadding(12, 10, 12, 10);
         t.setGravity(strong ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
 
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, strong ? 0.42f : 0.58f);
-        p.setMargins(0, 0, 1, 0);
+        p.setMargins(0, 0, borderPx(), 0);
         t.setLayoutParams(p);
         return t;
     }
 
     private String yesNo(boolean value) {
         return value ? "ZAPNUTO" : "VYPNUTO";
+    }
+
+    private void cycleLanguage() {
+        if ("Čeština".equals(interfaceLanguage)) interfaceLanguage = "English";
+        else if ("English".equals(interfaceLanguage)) interfaceLanguage = "Polski";
+        else if ("Polski".equals(interfaceLanguage)) interfaceLanguage = "Русский";
+        else if ("Русский".equals(interfaceLanguage)) interfaceLanguage = "日本語";
+        else if ("日本語".equals(interfaceLanguage)) interfaceLanguage = "中文";
+        else if ("中文".equals(interfaceLanguage)) interfaceLanguage = "Español";
+        else if ("Español".equals(interfaceLanguage)) interfaceLanguage = "Deutsch";
+        else if ("Deutsch".equals(interfaceLanguage)) interfaceLanguage = "Français";
+        else interfaceLanguage = "Čeština";
+
+        refreshSettings("interfaceLanguage=" + interfaceLanguage);
+    }
+
+    private String languageCode() {
+        if ("Čeština".equals(interfaceLanguage)) return "CS";
+        if ("English".equals(interfaceLanguage)) return "EN";
+        if ("Polski".equals(interfaceLanguage)) return "PL";
+        if ("Русский".equals(interfaceLanguage)) return "RU";
+        if ("日本語".equals(interfaceLanguage)) return "JA";
+        if ("中文".equals(interfaceLanguage)) return "ZH";
+        if ("Español".equals(interfaceLanguage)) return "ES";
+        if ("Deutsch".equals(interfaceLanguage)) return "DE";
+        if ("Français".equals(interfaceLanguage)) return "FR";
+        return "CS";
     }
 
     private void cyclePerformanceMode() {
@@ -431,7 +467,7 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setTextSize(10);
         b.setTextColor(page.equals(currentPage) ? (dark ? Color.BLACK : Color.WHITE) : TEXT);
-        b.setBackgroundColor(page.equals(currentPage) ? ACCENT : PANEL);
+        b.setBackground(page.equals(currentPage) ? boxAccent(ACCENT) : box(cyanBackDeep(), seaGreen()));
         b.setOnClickListener(v -> {
             saveKeyState();
             currentPage = page;
@@ -748,7 +784,7 @@ public class MainActivity extends Activity {
         card("Bezpečnost",
                 "Vyžadovat heslo: " + on(requirePassword) +
                 "\nVyžadovat hlavní seed: " + on(requireMainSeed) +
-                "\nVyžadovat MAC/TAG: " + on(requireMac) +
+                "\nVyžadovat MAC / TAG: " + on(requireMac) +
                 "\nZastavit při chybě: " + on(stopOnMacError) +
                 "\nDemo heslo povoleno: " + on(allowDemoPassword));
 
@@ -758,8 +794,8 @@ public class MainActivity extends Activity {
         content.addView(secRow1);
 
         LinearLayout secRow2 = row();
-        secRow2.addView(action("MAC/TAG", v -> { requireMac = !requireMac; refreshSettings("requireMac=" + requireMac); }));
-        secRow2.addView(action("STOP ERROR", v -> { stopOnMacError = !stopOnMacError; refreshSettings("stopOnMacError=" + stopOnMacError); }));
+        secRow2.addView(action("MAC / TAG", v -> { requireMac = !requireMac; refreshSettings("requireMac=" + requireMac); }));
+        secRow2.addView(action("STOP PŘI CHYBĚ", v -> { stopOnMacError = !stopOnMacError; refreshSettings("stopOnMacError=" + stopOnMacError); }));
         content.addView(secRow2);
 
         card("Výstupy po šifrování",
@@ -785,8 +821,8 @@ public class MainActivity extends Activity {
                 "\n\nHeslo patří do KLÍČE. ART je profil / dlaždice / navigační doplněk.");
 
         LinearLayout artRow = row();
-        artRow.addView(action("ART NAV", v -> { artAsNavigation = !artAsNavigation; refreshSettings("artAsNavigation=" + artAsNavigation); }));
-        artRow.addView(action("ART KAPSLE", v -> { artSaveToCapsule = !artSaveToCapsule; refreshSettings("artSaveToCapsule=" + artSaveToCapsule); }));
+        artRow.addView(action("ART NAVIGACE", v -> { artAsNavigation = !artAsNavigation; refreshSettings("artAsNavigation=" + artAsNavigation); }));
+        artRow.addView(action("ART DO KAPSLE", v -> { artSaveToCapsule = !artSaveToCapsule; refreshSettings("artSaveToCapsule=" + artSaveToCapsule); }));
         content.addView(artRow);
 
         card("Kryptografický profil",
@@ -801,7 +837,7 @@ public class MainActivity extends Activity {
                 "Aktuální komprese: " + compressionMode +
                 "\nKomprese bude další vrstva před šifrováním. Pro ostré použití musí být přesně zapsaná v metadatech, aby šla data obnovit.");
 
-        content.addView(action("PŘEPNOUT KOMPRESI", v -> cycleCompression()));
+        content.addView(action("KOMPRESNÍ PROFIL", v -> cycleCompression()));
 
         controlTable("OCHRANA ZAŘÍZENÍ", new String[][]{
                 {"Device Guard", yesNo(deviceGuardEnabled)},
@@ -813,14 +849,23 @@ public class MainActivity extends Activity {
 
         LinearLayout guardRow = row();
         guardRow.addView(action("DEVICE GUARD", v -> { deviceGuardEnabled = !deviceGuardEnabled; refreshSettings("deviceGuardEnabled=" + deviceGuardEnabled); }));
-        guardRow.addView(action("VÝKON", v -> cyclePerformanceMode()));
+        guardRow.addView(action("REŽIM VÝKONU", v -> cyclePerformanceMode()));
         content.addView(guardRow);
 
         card("Testy",
                 "Testovací režim: " + testMode +
                 "\nRychlé = funkčnost. Standardní = roundtrip + MAC. Těžké = statistické indikátory. Extrémní = dlouhé testy pro pozdější verzi.");
 
-        content.addView(action("PŘEPNOUT TESTY", v -> cycleTestMode()));
+        content.addView(action("TESTOVACÍ PROFIL", v -> cycleTestMode()));
+
+        controlTable("JAZYK / LOCALIZATION", new String[][]{
+                {"Aktuální jazyk", interfaceLanguage},
+                {"Kód jazyka", languageCode()},
+                {"Dostupné jazyky", "CS · EN · PL · RU · JA · ZH · ES · DE · FR"},
+                {"Stav překladu", "Alfa slovník"}
+        });
+
+        content.addView(action("PŘEPNOUT JAZYK", v -> cycleLanguage()));
 
         card("Reset / údržba",
                 "Resetuje jen lokální stav aplikace, neuložené výstupy a pracovní hodnoty.");
@@ -962,9 +1007,9 @@ public class MainActivity extends Activity {
                 {"Seedů", seedState},
                 {"ART profil", artProfile},
                 {"ART navigace", yesNo(artAsNavigation)},
-                {"MAC/TAG", yesNo(requireMac)},
+                {"MAC / TAG", yesNo(requireMac)},
                 {"Kapsle", yesNo(outputCapsule)},
-                {"Crypto profil", cryptoProfile}
+                {"Kryptografický profil", cryptoProfile}
         });
 
         content.addView(action("ZMĚNIT V KLÍČI", v -> {
@@ -1717,6 +1762,41 @@ public class MainActivity extends Activity {
         }
     }
 
+    private int seaGreen() {
+        return Color.rgb(46, 139, 87);
+    }
+
+    private int cyanBack() {
+        return dark ? Color.rgb(4, 30, 34) : Color.rgb(226, 250, 252);
+    }
+
+    private int cyanBackDeep() {
+        return dark ? Color.rgb(3, 18, 24) : Color.rgb(238, 253, 255);
+    }
+
+    private int borderPx() {
+        float px = getResources().getDisplayMetrics().xdpi * 0.15f / 25.4f;
+        return Math.max(1, Math.round(px));
+    }
+
+    private GradientDrawable box(int fill, int stroke) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.RECTANGLE);
+        g.setColor(fill);
+        g.setStroke(borderPx(), stroke);
+        g.setCornerRadius(0);
+        return g;
+    }
+
+    private GradientDrawable boxAccent(int fill) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.RECTANGLE);
+        g.setColor(fill);
+        g.setStroke(Math.max(borderPx(), 1), ACCENT);
+        g.setCornerRadius(0);
+        return g;
+    }
+
     private LinearLayout row() {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
@@ -1730,7 +1810,7 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setTextSize(11);
         b.setTextColor(dark ? Color.rgb(3, 5, 10) : Color.WHITE);
-        b.setBackgroundColor(ACCENT);
+        b.setBackground(boxAccent(ACCENT));
         b.setOnClickListener(l);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         p.setMargins(4, 6, 4, 6);
@@ -1744,7 +1824,7 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setTextSize(11);
         b.setTextColor(TEXT);
-        b.setBackgroundColor(CARD);
+        b.setBackground(box(cyanBack(), seaGreen()));
         return b;
     }
 
@@ -1755,7 +1835,7 @@ public class MainActivity extends Activity {
         e.setSingleLine(true);
         e.setTextColor(TEXT);
         e.setHintTextColor(MUTED);
-        e.setBackgroundColor(FIELD);
+        e.setBackground(box(cyanBack(), seaGreen()));
         e.setPadding(16, 12, 16, 12);
         if (secret) e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1771,7 +1851,7 @@ public class MainActivity extends Activity {
         e.setGravity(Gravity.TOP | Gravity.START);
         e.setTextColor(TEXT);
         e.setHintTextColor(MUTED);
-        e.setBackgroundColor(FIELD);
+        e.setBackground(box(cyanBack(), seaGreen()));
         e.setTypeface(Typeface.MONOSPACE);
         e.setPadding(16, 16, 16, 16);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1792,21 +1872,28 @@ public class MainActivity extends Activity {
 
     private void hero(String h, String b) {
         TextView v = text(h + "\n\n" + b, 15, TEXT, false);
-        v.setBackgroundColor(CARD);
-        v.setPadding(18, 18, 18, 18);
+        v.setBackground(box(cyanBackDeep(), seaGreen()));
+        v.setPadding(20, 20, 20, 20);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.setMargins(0, 8, 0, 12);
+        v.setLayoutParams(p);
         content.addView(v);
     }
 
     private void section(String s) {
         TextView v = text(s, 13, ACCENT, true);
-        v.setLetterSpacing(0.10f);
-        v.setPadding(0, 18, 0, 8);
+        v.setLetterSpacing(0.12f);
+        v.setPadding(14, 12, 14, 12);
+        v.setBackground(box(cyanBackDeep(), seaGreen()));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.setMargins(0, 18, 0, 8);
+        v.setLayoutParams(p);
         content.addView(v);
     }
 
     private void card(String h, String b) {
         TextView v = text(h + "\n\n" + b, 15, TEXT, false);
-        v.setBackgroundColor(CARD);
+        v.setBackground(box(cyanBack(), seaGreen()));
         v.setPadding(18, 18, 18, 18);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         p.setMargins(0, 8, 0, 8);
@@ -1825,7 +1912,7 @@ public class MainActivity extends Activity {
     private TextView metric(String h, String v) {
         TextView t = text(h + "\n" + v, 12, TEXT, true);
         t.setGravity(Gravity.CENTER);
-        t.setBackgroundColor(CARD);
+        t.setBackground(box(cyanBack(), seaGreen()));
         t.setPadding(10, 12, 10, 12);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         p.setMargins(4, 8, 4, 8);
