@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.9-alpha";
-    private final String patchVersion = "P-2026-05-31-11-VERIFY-FIRST-PREP";
+    private final String appVersion = "0.12.0-alpha";
+    private final String patchVersion = "P-2026-05-31-12-SIDE-RAIL-UI";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -785,7 +785,7 @@ public class MainActivity extends Activity {
                 "QES Core není jen XOR ani ARX. Je to sada vratných vrstev: permutace, difuze, superpozice, rotace, XOR masky, ARX prvky a tagové vrstvy.");
         card("Symetrie",
                 "Stejná navigace, která data zašifruje, je potřebná i k jejich obnově. Kdo nemá password, seedy a particle, nemá správnou trasu.");
-        card("Cover",
+        card("COVER",
                 "Současný cover carrier ukládá QES payload do finálního cover souboru. Adaptive Labyrinth Cover je navazující etapa: body, křivka, kapacita, rotace, permutace a návrat podle klíče.");
             card("App Shield a Side-Channel Guard",
                 "App Shield chrání okolí aplikace: žádný internet, žádná telemetrie, secure screen, žádné tajné logy.\n\nSide-Channel Guard chrání provedení: progress jen podle veřejné délky, constant-time porovnání MAC/hash, zákaz early-exit kontroly a zákaz zobrazování tajných tras.");
@@ -799,7 +799,7 @@ public class MainActivity extends Activity {
         r.addView(action("ULOŽIT LOG", v -> saveLog()));
         r.addView(action("VYČISTIT LOG", v -> clearLog()));
         content.addView(r);
-        logBox = area("Log");
+        logBox = area("LOG");
         logBox.setText(log.toString());
         content.addView(logBox);
     }
@@ -1014,7 +1014,7 @@ public class MainActivity extends Activity {
         guardRow.addView(action("REŽIM VÝKONU", v -> cyclePerformanceMode()));
         content.addView(guardRow);
 
-        card("Testy",
+        card("TESTY",
                 "Testovací režim: " + testMode +
                 "\nRychlé = funkčnost. Standardní = roundtrip + MAC. Těžké = statistické indikátory. Extrémní = dlouhé testy pro pozdější verzi.");
 
@@ -2790,6 +2790,627 @@ public class MainActivity extends Activity {
 
         if (parent != null && !parent.canWrite()) {
             throw new java.io.IOException("Do výstupní složky nelze zapisovat.");
+        }
+    }
+
+
+
+    // ============================================================
+    // QES SIDE RAIL UI PATCH
+    // P-2026-05-31-12-SIDE-RAIL-UI
+    //
+    // Přidává stabilní boční lištu:
+    // PŘEHLED, KLÍČ, ART, TEXT, SOUBOR, COVER, OVĚŘENÍ,
+    // TESTY, LOG, MAC / ZERO LOCK, ARCH, ZERO, NASTAVENÍ.
+    //
+    // Lišta nepřepisuje kryptografická data, hesla, seedy ani logy.
+    // Funguje jako UI wrapper kolem existující obrazovky.
+    // ============================================================
+
+    private boolean qesSideRailUiPatchInstalled() {
+        return true;
+    }
+
+    private int qesDp(float value) {
+        return Math.max(1, (int) (value * getResources().getDisplayMetrics().density + 0.5f));
+    }
+
+    private String qesUiLanguageCode() {
+        try {
+            android.content.SharedPreferences p = getSharedPreferences("qes_settings", MODE_PRIVATE);
+
+            String[] keys = new String[] {
+                "qes_language",
+                "qes_lang",
+                "language",
+                "app_language",
+                "ui_language"
+            };
+
+            for (String key : keys) {
+                String v = p.getString(key, "");
+                if (v != null && v.trim().length() > 0) {
+                    return qesNormalizeLanguageCode(v);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            String device = java.util.Locale.getDefault().getLanguage();
+            return qesNormalizeLanguageCode(device);
+        } catch (Throwable ignored) {
+            return "cs";
+        }
+    }
+
+    private String qesNormalizeLanguageCode(String raw) {
+        if (raw == null) {
+            return "cs";
+        }
+
+        String v = raw.trim().toLowerCase(java.util.Locale.ROOT);
+
+        if (v.startsWith("cz")) return "cs";
+        if (v.startsWith("cs")) return "cs";
+        if (v.startsWith("en")) return "en";
+        if (v.startsWith("pl")) return "pl";
+        if (v.startsWith("ru")) return "ru";
+        if (v.startsWith("ja")) return "ja";
+        if (v.startsWith("jp")) return "ja";
+        if (v.startsWith("zh")) return "zh";
+        if (v.startsWith("cn")) return "zh";
+        if (v.startsWith("es")) return "es";
+        if (v.startsWith("de")) return "de";
+        if (v.startsWith("fr")) return "fr";
+
+        return "cs";
+    }
+
+    private String qesUiLabel(String key) {
+        String lang = qesUiLanguageCode();
+
+        if ("en".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "OVERVIEW";
+            if ("KLÍČ".equals(key)) return "KEY";
+            if ("ART".equals(key)) return "ART";
+            if ("TEXT".equals(key)) return "TEXT";
+            if ("SOUBOR".equals(key)) return "FILE";
+            if ("COVER".equals(key)) return "COVER";
+            if ("OVĚŘENÍ".equals(key)) return "VERIFY";
+            if ("TESTY".equals(key)) return "TESTS";
+            if ("LOG".equals(key)) return "LOG";
+            if ("MAC / ZERO LOCK".equals(key)) return "MAC / ZERO";
+            if ("ARCH".equals(key)) return "ARCH";
+            if ("ZERO".equals(key)) return "ZERO";
+            if ("NASTAVENÍ".equals(key)) return "SETTINGS";
+        }
+
+        if ("pl".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "PRZEGLĄD";
+            if ("KLÍČ".equals(key)) return "KLUCZ";
+            if ("SOUBOR".equals(key)) return "PLIK";
+            if ("OVĚŘENÍ".equals(key)) return "WERYFIKACJA";
+            if ("TESTY".equals(key)) return "TESTY";
+            if ("NASTAVENÍ".equals(key)) return "USTAWIENIA";
+        }
+
+        if ("ru".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "ОБЗОР";
+            if ("KLÍČ".equals(key)) return "КЛЮЧ";
+            if ("SOUBOR".equals(key)) return "ФАЙЛ";
+            if ("OVĚŘENÍ".equals(key)) return "ПРОВЕРКА";
+            if ("TESTY".equals(key)) return "ТЕСТЫ";
+            if ("NASTAVENÍ".equals(key)) return "НАСТРОЙКИ";
+        }
+
+        if ("ja".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "概要";
+            if ("KLÍČ".equals(key)) return "キー";
+            if ("SOUBOR".equals(key)) return "ファイル";
+            if ("OVĚŘENÍ".equals(key)) return "検証";
+            if ("TESTY".equals(key)) return "テスト";
+            if ("NASTAVENÍ".equals(key)) return "設定";
+        }
+
+        if ("zh".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "概览";
+            if ("KLÍČ".equals(key)) return "密钥";
+            if ("SOUBOR".equals(key)) return "文件";
+            if ("OVĚŘENÍ".equals(key)) return "验证";
+            if ("TESTY".equals(key)) return "测试";
+            if ("NASTAVENÍ".equals(key)) return "设置";
+        }
+
+        if ("es".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "RESUMEN";
+            if ("KLÍČ".equals(key)) return "CLAVE";
+            if ("SOUBOR".equals(key)) return "ARCHIVO";
+            if ("OVĚŘENÍ".equals(key)) return "VERIFICAR";
+            if ("TESTY".equals(key)) return "PRUEBAS";
+            if ("NASTAVENÍ".equals(key)) return "AJUSTES";
+        }
+
+        if ("de".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "ÜBERSICHT";
+            if ("KLÍČ".equals(key)) return "SCHLÜSSEL";
+            if ("SOUBOR".equals(key)) return "DATEI";
+            if ("OVĚŘENÍ".equals(key)) return "PRÜFUNG";
+            if ("TESTY".equals(key)) return "TESTS";
+            if ("NASTAVENÍ".equals(key)) return "EINSTELL.";
+        }
+
+        if ("fr".equals(lang)) {
+            if ("PŘEHLED".equals(key)) return "APERÇU";
+            if ("KLÍČ".equals(key)) return "CLÉ";
+            if ("SOUBOR".equals(key)) return "FICHIER";
+            if ("OVĚŘENÍ".equals(key)) return "VÉRIFIER";
+            if ("TESTY".equals(key)) return "TESTS";
+            if ("NASTAVENÍ".equals(key)) return "RÉGLAGES";
+        }
+
+        return key;
+    }
+
+    private void qesInstallSideNavigationRail() {
+        try {
+            android.view.ViewGroup content = findViewById(android.R.id.content);
+            if (content == null || content.getChildCount() == 0) {
+                return;
+            }
+
+            android.view.View current = content.getChildAt(0);
+            Object tag = current.getTag();
+            if (tag != null && "QES_SIDE_RAIL_WRAPPER".equals(String.valueOf(tag))) {
+                qesApplyQesContrastRecursive(current);
+                return;
+            }
+
+            content.removeView(current);
+
+            android.widget.LinearLayout wrapper = new android.widget.LinearLayout(this);
+            wrapper.setTag("QES_SIDE_RAIL_WRAPPER");
+            wrapper.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            wrapper.setBackgroundColor(android.graphics.Color.rgb(4, 14, 18));
+            wrapper.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+
+            android.widget.ScrollView railScroll = new android.widget.ScrollView(this);
+            railScroll.setFillViewport(false);
+            railScroll.setTag("QES_SIDE_NAV_RAIL");
+
+            android.widget.LinearLayout rail = new android.widget.LinearLayout(this);
+            rail.setTag("QES_SIDE_NAV_RAIL");
+            rail.setOrientation(android.widget.LinearLayout.VERTICAL);
+            rail.setPadding(qesDp(4), qesDp(6), qesDp(4), qesDp(6));
+            rail.setBackground(qesPanelBackground());
+
+            android.widget.TextView title = new android.widget.TextView(this);
+            title.setText("QES");
+            title.setTextColor(android.graphics.Color.rgb(112, 255, 240));
+            title.setTextSize(14);
+            title.setGravity(android.view.Gravity.CENTER);
+            title.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            title.setPadding(qesDp(2), qesDp(4), qesDp(2), qesDp(8));
+            rail.addView(title, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+
+            String[] sections = new String[] {
+                "PŘEHLED",
+                "KLÍČ",
+                "ART",
+                "TEXT",
+                "SOUBOR",
+                "COVER",
+                "OVĚŘENÍ",
+                "TESTY",
+                "LOG",
+                "MAC / ZERO LOCK",
+                "ARCH",
+                "ZERO",
+                "NASTAVENÍ"
+            };
+
+            for (final String section : sections) {
+                android.widget.TextView b = qesCreateRailButton(section);
+                rail.addView(b);
+            }
+
+            railScroll.addView(rail, new android.widget.ScrollView.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+
+            int railWidth = qesDp(112);
+            wrapper.addView(railScroll, new android.widget.LinearLayout.LayoutParams(
+                railWidth,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+
+            wrapper.addView(current, new android.widget.LinearLayout.LayoutParams(
+                0,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                1f
+            ));
+
+            content.addView(wrapper);
+
+            qesApplyQesContrastRecursive(wrapper);
+        } catch (Throwable t) {
+            // UI patch nesmí shodit aplikaci. Chybu nezapisovat s citlivými hodnotami.
+            try {
+                android.widget.Toast.makeText(this, "QES UI lišta se nepodařila načíst.", android.widget.Toast.LENGTH_SHORT).show();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private android.widget.TextView qesCreateRailButton(final String section) {
+        android.widget.TextView b = new android.widget.TextView(this);
+        b.setText(qesUiLabel(section));
+        b.setTag("QES_SIDE_NAV_BUTTON:" + section);
+        b.setGravity(android.view.Gravity.CENTER);
+        b.setTextSize(10);
+        b.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        b.setTextColor(android.graphics.Color.rgb(170, 255, 248));
+        b.setSingleLine(false);
+        b.setMinHeight(qesDp(36));
+        b.setPadding(qesDp(3), qesDp(5), qesDp(3), qesDp(5));
+        b.setBackground(qesButtonBackground(false));
+
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        lp.setMargins(0, 0, 0, qesDp(5));
+        b.setLayoutParams(lp);
+
+        b.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View v) {
+                qesNavigateToSection(section);
+            }
+        });
+
+        b.setOnLongClickListener(new android.view.View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(android.view.View v) {
+                if ("NASTAVENÍ".equals(section)) {
+                    qesCycleUiLanguage();
+                    qesRefreshSideRailLabels();
+                    android.widget.Toast.makeText(MainActivity.this, "QES jazyk lišty: " + qesUiLanguageCode(), android.widget.Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        return b;
+    }
+
+    private void qesCycleUiLanguage() {
+        String[] langs = new String[] {"cs", "en", "pl", "ru", "ja", "zh", "es", "de", "fr"};
+        String current = qesUiLanguageCode();
+        int next = 0;
+
+        for (int i = 0; i < langs.length; i++) {
+            if (langs[i].equals(current)) {
+                next = (i + 1) % langs.length;
+                break;
+            }
+        }
+
+        try {
+            getSharedPreferences("qes_settings", MODE_PRIVATE)
+                .edit()
+                .putString("qes_language", langs[next])
+                .putString("qes_lang", langs[next])
+                .putString("language", langs[next])
+                .apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesRefreshSideRailLabels() {
+        try {
+            android.view.View root = getWindow().getDecorView();
+            qesRefreshSideRailLabelsRecursive(root);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesRefreshSideRailLabelsRecursive(android.view.View v) {
+        if (v == null) {
+            return;
+        }
+
+        Object tag = v.getTag();
+        if (tag != null) {
+            String t = String.valueOf(tag);
+            if (t.startsWith("QES_SIDE_NAV_BUTTON:") && v instanceof android.widget.TextView) {
+                String section = t.substring("QES_SIDE_NAV_BUTTON:".length());
+                ((android.widget.TextView) v).setText(qesUiLabel(section));
+            }
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                qesRefreshSideRailLabelsRecursive(g.getChildAt(i));
+            }
+        }
+    }
+
+    private android.graphics.drawable.GradientDrawable qesPanelBackground() {
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setColor(android.graphics.Color.rgb(3, 20, 24));
+        d.setStroke(qesDp(1), android.graphics.Color.rgb(46, 139, 118));
+        d.setCornerRadius(qesDp(8));
+        return d;
+    }
+
+    private android.graphics.drawable.GradientDrawable qesButtonBackground(boolean active) {
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setColor(active ? android.graphics.Color.rgb(0, 70, 76) : android.graphics.Color.rgb(5, 35, 42));
+        d.setStroke(qesDp(1), active ? android.graphics.Color.rgb(112, 255, 240) : android.graphics.Color.rgb(46, 139, 118));
+        d.setCornerRadius(qesDp(7));
+        return d;
+    }
+
+    private void qesNavigateToSection(String section) {
+        try {
+            qesHighlightRailSection(section);
+
+            android.view.View root = getWindow().getDecorView();
+
+            android.view.View clickable = qesFindClickableSection(root, section);
+            if (clickable != null) {
+                clickable.performClick();
+                return;
+            }
+
+            android.view.View target = qesFindSectionText(root, section);
+            if (target != null) {
+                target.requestFocus();
+                qesScrollParentToTarget(target);
+                return;
+            }
+
+            android.widget.Toast.makeText(this, "Sekce: " + section, android.widget.Toast.LENGTH_SHORT).show();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesHighlightRailSection(String section) {
+        try {
+            qesHighlightRailSectionRecursive(getWindow().getDecorView(), section);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesHighlightRailSectionRecursive(android.view.View v, String section) {
+        if (v == null) {
+            return;
+        }
+
+        Object tag = v.getTag();
+        if (tag != null) {
+            String t = String.valueOf(tag);
+            if (t.startsWith("QES_SIDE_NAV_BUTTON:") && v instanceof android.widget.TextView) {
+                String s = t.substring("QES_SIDE_NAV_BUTTON:".length());
+                v.setBackground(qesButtonBackground(section.equals(s)));
+            }
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                qesHighlightRailSectionRecursive(g.getChildAt(i), section);
+            }
+        }
+    }
+
+    private android.view.View qesFindClickableSection(android.view.View v, String section) {
+        if (v == null) {
+            return null;
+        }
+
+        if (qesIsInsideSideRail(v)) {
+            return null;
+        }
+
+        if (v instanceof android.widget.TextView) {
+            android.widget.TextView tv = (android.widget.TextView) v;
+            String text = String.valueOf(tv.getText());
+            if (qesTextMatchesSection(text, section) && v.isShown() && v.isEnabled() && v.isClickable()) {
+                return v;
+            }
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.view.View found = qesFindClickableSection(g.getChildAt(i), section);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private android.view.View qesFindSectionText(android.view.View v, String section) {
+        if (v == null) {
+            return null;
+        }
+
+        if (qesIsInsideSideRail(v)) {
+            return null;
+        }
+
+        if (v instanceof android.widget.TextView) {
+            android.widget.TextView tv = (android.widget.TextView) v;
+            String text = String.valueOf(tv.getText());
+            if (qesTextMatchesSection(text, section) && v.isShown()) {
+                return v;
+            }
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.view.View found = qesFindSectionText(g.getChildAt(i), section);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private boolean qesIsInsideSideRail(android.view.View v) {
+        android.view.View current = v;
+
+        while (current != null) {
+            Object tag = current.getTag();
+            if (tag != null && String.valueOf(tag).startsWith("QES_SIDE_NAV")) {
+                return true;
+            }
+
+            android.view.ViewParent p = current.getParent();
+            if (!(p instanceof android.view.View)) {
+                break;
+            }
+            current = (android.view.View) p;
+        }
+
+        return false;
+    }
+
+    private boolean qesTextMatchesSection(String text, String section) {
+        String a = qesNormalizeUiText(text);
+        String b = qesNormalizeUiText(section);
+        String c = qesNormalizeUiText(qesUiLabel(section));
+
+        if (a.equals(b) || a.equals(c)) {
+            return true;
+        }
+
+        if (a.contains(b) || a.contains(c)) {
+            return true;
+        }
+
+        if ("MAC / ZERO LOCK".equals(section)) {
+            return a.contains("MAC") && a.contains("ZERO");
+        }
+
+        return false;
+    }
+
+    private String qesNormalizeUiText(String input) {
+        if (input == null) {
+            return "";
+        }
+
+        String s = input.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
+            s = s.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        } catch (Throwable ignored) {
+        }
+
+        s = s.replace("/", " ");
+        s = s.replace("-", " ");
+        s = s.replace("_", " ");
+        s = s.replaceAll("\\s+", " ").trim();
+
+        return s;
+    }
+
+    private void qesScrollParentToTarget(android.view.View target) {
+        try {
+            android.view.View current = target;
+            while (current != null) {
+                android.view.ViewParent parent = current.getParent();
+                if (parent instanceof android.widget.ScrollView) {
+                    android.widget.ScrollView sv = (android.widget.ScrollView) parent;
+                    final int y = Math.max(0, target.getTop() - qesDp(24));
+                    sv.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            sv.smoothScrollTo(0, y);
+                        }
+                    });
+                    return;
+                }
+                if (!(parent instanceof android.view.View)) {
+                    return;
+                }
+                current = (android.view.View) parent;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesApplyQesContrastRecursive(android.view.View v) {
+        if (v == null) {
+            return;
+        }
+
+        try {
+            if (v instanceof android.widget.Button) {
+                android.widget.Button b = (android.widget.Button) v;
+                if (!qesIsInsideSideRail(v)) {
+                    b.setTextColor(android.graphics.Color.rgb(170, 255, 248));
+                    b.setAllCaps(false);
+                    b.setBackground(qesButtonBackground(false));
+                    b.setPadding(qesDp(8), qesDp(6), qesDp(8), qesDp(6));
+                }
+            } else if (v instanceof android.widget.EditText) {
+                android.widget.EditText e = (android.widget.EditText) v;
+                e.setTextColor(android.graphics.Color.rgb(235, 255, 253));
+                e.setHintTextColor(android.graphics.Color.rgb(120, 190, 185));
+                e.setBackground(qesButtonBackground(false));
+                e.setPadding(qesDp(8), qesDp(6), qesDp(8), qesDp(6));
+            } else if (v instanceof android.widget.TextView && !qesIsInsideSideRail(v)) {
+                android.widget.TextView tv = (android.widget.TextView) v;
+                CharSequence tx = tv.getText();
+                if (tx != null) {
+                    String norm = qesNormalizeUiText(String.valueOf(tx));
+                    if (
+                        "PREHLED".equals(norm) ||
+                        "KLIC".equals(norm) ||
+                        "ART".equals(norm) ||
+                        "TEXT".equals(norm) ||
+                        "SOUBOR".equals(norm) ||
+                        "COVER".equals(norm) ||
+                        "OVERENI".equals(norm) ||
+                        "TESTY".equals(norm) ||
+                        "LOG".equals(norm) ||
+                        "ARCH".equals(norm) ||
+                        "ZERO".equals(norm) ||
+                        "NASTAVENI".equals(norm) ||
+                        norm.contains("MAC ZERO")
+                    ) {
+                        tv.setTextColor(android.graphics.Color.rgb(112, 255, 240));
+                        tv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+                    }
+                }
+            }
+
+            if (v instanceof android.view.ViewGroup) {
+                android.view.ViewGroup g = (android.view.ViewGroup) v;
+                for (int i = 0; i < g.getChildCount(); i++) {
+                    qesApplyQesContrastRecursive(g.getChildAt(i));
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 
