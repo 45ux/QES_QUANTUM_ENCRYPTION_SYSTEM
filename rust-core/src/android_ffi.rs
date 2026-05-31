@@ -1,8 +1,7 @@
 //! Android JNI bridge for QES.
 //!
-//! This module exposes the existing Rust QES core to a native Android APK.
-//! It is compiled only for Android targets and loaded from Kotlin through
-//! `System.loadLibrary("qes_core")`.
+//! Native Android bridge for QES Rust core.
+//! This file must compile for Android target as cdylib.
 
 use crate::ascii_art::Particle;
 use crate::cipher::{decrypt_from_ascii_art, encrypt_to_ascii_art, QcsParams};
@@ -24,7 +23,7 @@ fn get_string(env: &mut JNIEnv, input: JString) -> Result<String, String> {
 }
 
 fn get_bytes(env: &mut JNIEnv, input: JByteArray) -> Result<Vec<u8>, String> {
-    env.convert_byte_array(input)
+    env.convert_byte_array(&input)
         .map_err(|e| format!("JNI byte array chyba: {e}"))
 }
 
@@ -35,6 +34,7 @@ fn make_bytes(env: &mut JNIEnv, bytes: &[u8]) -> jbyteArray {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_params(
     env: &mut JNIEnv,
     password: JString,
@@ -49,8 +49,7 @@ fn build_params(
     amplitude: i32,
 ) -> Result<QcsParams, String> {
     let glyph_s = get_string(env, glyph)?;
-    let mut chars = glyph_s.chars();
-    let glyph = chars.next().unwrap_or('X');
+    let glyph_string = glyph_s.chars().next().unwrap_or('X').to_string();
 
     Ok(QcsParams {
         password: get_string(env, password)?,
@@ -59,7 +58,7 @@ fn build_params(
         seed3: get_string(env, seed3)?,
         seed4: get_string(env, seed4)?,
         particle: Particle {
-            glyph,
+            glyph: glyph_string,
             value: value.clamp(0, 255) as u8,
             vector: get_string(env, vector)?,
             phase: phase.max(0) as u64,
@@ -68,8 +67,6 @@ fn build_params(
     })
 }
 
-/// Kotlin signature:
-/// external fun encryptText(plaintext: String, password: String, seed1: String, seed2: String, seed3: String, seed4: String, glyph: String, value: Int, vector: String, phase: Long, amplitude: Int): String
 #[no_mangle]
 pub extern "system" fn Java_org_zero_qes_QesNative_encryptText(
     mut env: JNIEnv,
@@ -86,9 +83,21 @@ pub extern "system" fn Java_org_zero_qes_QesNative_encryptText(
     phase: i64,
     amplitude: i32,
 ) -> jstring {
-    let result = (|| {
+    let result: Result<String, String> = (|| {
         let data = get_string(&mut env, plaintext)?.into_bytes();
-        let params = build_params(&mut env, password, seed1, seed2, seed3, seed4, glyph, value, vector, phase, amplitude)?;
+        let params = build_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+        )?;
         encrypt_to_ascii_art(&data, &params).map_err(|e| e.to_string())
     })();
 
@@ -98,8 +107,6 @@ pub extern "system" fn Java_org_zero_qes_QesNative_encryptText(
     }
 }
 
-/// Kotlin signature:
-/// external fun decryptText(packageText: String, password: String, seed1: String, seed2: String, seed3: String, seed4: String, glyph: String, value: Int, vector: String, phase: Long, amplitude: Int): String
 #[no_mangle]
 pub extern "system" fn Java_org_zero_qes_QesNative_decryptText(
     mut env: JNIEnv,
@@ -116,11 +123,24 @@ pub extern "system" fn Java_org_zero_qes_QesNative_decryptText(
     phase: i64,
     amplitude: i32,
 ) -> jstring {
-    let result = (|| {
+    let result: Result<String, String> = (|| {
         let package = get_string(&mut env, package_text)?;
-        let params = build_params(&mut env, password, seed1, seed2, seed3, seed4, glyph, value, vector, phase, amplitude)?;
+        let params = build_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+        )?;
         let bytes = decrypt_from_ascii_art(&package, &params).map_err(|e| e.to_string())?;
-        String::from_utf8(bytes).map_err(|_| "výstup není platný UTF-8 text; použij dešifrování souboru".to_string())
+        String::from_utf8(bytes)
+            .map_err(|_| "výstup není platný UTF-8 text; použij dešifrování souboru".to_string())
     })();
 
     match result {
@@ -129,8 +149,6 @@ pub extern "system" fn Java_org_zero_qes_QesNative_decryptText(
     }
 }
 
-/// Kotlin signature:
-/// external fun encryptBytes(data: ByteArray, ...): ByteArray
 #[no_mangle]
 pub extern "system" fn Java_org_zero_qes_QesNative_encryptBytes(
     mut env: JNIEnv,
@@ -147,10 +165,22 @@ pub extern "system" fn Java_org_zero_qes_QesNative_encryptBytes(
     phase: i64,
     amplitude: i32,
 ) -> jbyteArray {
-    let result = (|| {
-        let data = get_bytes(&mut env, data)?;
-        let params = build_params(&mut env, password, seed1, seed2, seed3, seed4, glyph, value, vector, phase, amplitude)?;
-        let package = encrypt_to_ascii_art(&data, &params).map_err(|e| e.to_string())?;
+    let result: Result<Vec<u8>, String> = (|| {
+        let input_data = get_bytes(&mut env, data)?;
+        let params = build_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+        )?;
+        let package = encrypt_to_ascii_art(&input_data, &params).map_err(|e| e.to_string())?;
         Ok(package.into_bytes())
     })();
 
@@ -160,8 +190,6 @@ pub extern "system" fn Java_org_zero_qes_QesNative_encryptBytes(
     }
 }
 
-/// Kotlin signature:
-/// external fun decryptBytes(packageBytes: ByteArray, ...): ByteArray
 #[no_mangle]
 pub extern "system" fn Java_org_zero_qes_QesNative_decryptBytes(
     mut env: JNIEnv,
@@ -178,10 +206,23 @@ pub extern "system" fn Java_org_zero_qes_QesNative_decryptBytes(
     phase: i64,
     amplitude: i32,
 ) -> jbyteArray {
-    let result = (|| {
-        let package_bytes = get_bytes(&mut env, package_bytes)?;
-        let package = String::from_utf8(package_bytes).map_err(|_| "QES balík není UTF-8 ASCII art".to_string())?;
-        let params = build_params(&mut env, password, seed1, seed2, seed3, seed4, glyph, value, vector, phase, amplitude)?;
+    let result: Result<Vec<u8>, String> = (|| {
+        let input_package_bytes = get_bytes(&mut env, package_bytes)?;
+        let package = String::from_utf8(input_package_bytes)
+            .map_err(|_| "QES balík není UTF-8 ASCII art".to_string())?;
+        let params = build_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+        )?;
         decrypt_from_ascii_art(&package, &params).map_err(|e| e.to_string())
     })();
 
