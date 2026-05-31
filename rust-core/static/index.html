@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QES – Quantum Encryption System</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body data-theme="dark">
+  <main class="shell">
+    <header class="hero">
+      <div class="mark">QES</div>
+      <div class="heroText">
+        <p class="kicker">Quantum Encryption System • ZERO build • lokální Rust server</p>
+        <h1>Šifra. Kapsle. Kontrola.</h1>
+        <p class="lead">QES v8.2 je výzkumný prototyp symetrického šifrovacího systému. Stejné tajemství — password, seedy a particle — vytváří cestu pro šifrování i dešifrování. Výstupem je zašifrovaný soubor, samostatná QES‑128 kapsle, public hash a keyed MAC.</p>
+      </div>
+      <div class="sideStatus"><b id="health">server: kontroluji</b><span>ZERO</span></div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-panel="normalPanel">Normální režim</button>
+      <button class="tab" data-panel="carrierPanel">Carrier kompatibilita</button>
+      <button class="tab" data-panel="diagPanel">Diagnostika</button>
+      <button class="tab" data-panel="manualPanel">Architektura</button>
+      <button id="themeBtn" class="tab ghost">Světlý / tmavý</button>
+    </nav>
+
+    <section class="grid two keyGrid">
+      <article class="card keyCard">
+        <h2>Klíčová navigace</h2>
+        <p class="copy">Password, čtyři seedy a particle tvoří navigaci. Nejsou to ozdoby. Z nich vzniká master seed, skrytá trasa, MAC a QES kapsle.</p>
+        <label>Password<input id="password" type="password" value="tajne-heslo" autocomplete="off" /></label>
+        <div class="row2">
+          <label>Seed 1<input id="seed1" value="seed-111" /></label>
+          <label>Seed 2<input id="seed2" value="seed-222" /></label>
+          <label>Seed 3<input id="seed3" value="seed-333" /></label>
+          <label>Seed 4<input id="seed4" value="seed-444" /></label>
+        </div>
+        <div class="row5">
+          <label>Glyph<input id="glyph" value="X" maxlength="8" /></label>
+          <label>Value<input id="value" type="number" min="0" max="255" value="77" /></label>
+          <label>Vector<input id="vector" value="vektor" /></label>
+          <label>Phase<input id="phase" type="number" value="13" /></label>
+          <label>Amplitude<input id="amplitude" type="number" min="0" max="255" value="9" /></label>
+        </div>
+      </article>
+
+      <article class="card metrics">
+        <h2>Provozní stav</h2>
+        <div class="metric"><span>Vstup</span><b id="mInput">–</b></div>
+        <div class="metric"><span>Výstup</span><b id="mOutput">–</b></div>
+        <div class="metric"><span>Čas</span><b id="mTime">–</b></div>
+        <div class="metric"><span>Rychlost</span><b id="mSpeed">–</b></div>
+        <div id="status" class="status">Připraveno.</div>
+      </article>
+    </section>
+
+    <section id="normalPanel" class="panel active">
+      <div class="grid two">
+        <article class="card">
+          <h2>Zašifrovat text nebo soubor</h2>
+          <p class="copy">Normální režim vytvoří QES textový nosič a k němu samostatnou kapsli. Public hash ověří změnu bez klíče. Keyed MAC ověří změnu s klíčem.</p>
+          <label>Text k šifrování<textarea id="plainText" spellcheck="false">Heslo</textarea></label>
+          <label>Soubor k šifrování<input id="plainFile" type="file" /></label>
+          <div class="actions">
+            <button id="encryptTextBtn">Zašifrovat text</button>
+            <button id="encryptFileBtn">Zašifrovat soubor</button>
+          </div>
+          <div class="actions subtle">
+            <button id="downloadQesBtn">Stáhnout .qes</button>
+            <button id="downloadCapsuleBtn">Stáhnout .qes128</button>
+            <button id="downloadCheckBtn">Stáhnout kontrolu</button>
+          </div>
+          <div class="hashBox">
+            <p><span>Public hash</span><code id="publicHash">–</code></p>
+            <p><span>Keyed MAC</span><code id="keyedMac">–</code></p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Dešifrovat text nebo soubor</h2>
+          <p class="copy">Nahraj QES výstup a ideálně i QES‑128 kapsli. Kapsle ověří, že soubor, režim i klíč sedí. Potom stáhneš původní data.</p>
+          <label>QES nosič<textarea id="qesText" spellcheck="false"></textarea></label>
+          <label>Nahrát .qes soubor<input id="qesFile" type="file" accept=".qes,.txt,text/plain" /></label>
+          <label>Nahrát QES‑128 kapsli<input id="capsuleFile" type="file" accept=".qes128,.txt" /></label>
+          <div class="actions">
+            <button id="loadQesBtn">Načíst .qes</button>
+            <button id="decryptQesBtn">Dešifrovat</button>
+            <button id="downloadPlainBtn">Stáhnout výstup</button>
+          </div>
+          <label>Náhled dešifrovaného textu<textarea id="decryptedPreview" spellcheck="false" readonly></textarea></label>
+        </article>
+      </div>
+    </section>
+
+    <section id="carrierPanel" class="panel">
+      <div class="grid two">
+        <article class="card">
+          <h2>Carrier kompatibilní režim</h2>
+          <p class="copy">Tento režim je přechodová kompatibilita z V7. Vloží QES payload do souboru jako carrier přílohu a vytvoří QES‑128 kapsli zvlášť. Skutečný Adaptive Labyrinth Cover bude další etapa po konzultaci.</p>
+          <label>Text k vložení<textarea id="carrierPlainText" spellcheck="false">Tajná zpráva</textarea></label>
+          <label>Nebo soubor k vložení<input id="carrierPlainFile" type="file" /></label>
+          <label>Cover soubor<input id="coverFile" type="file" /></label>
+          <div class="actions">
+            <button id="encryptCarrierTextBtn">Vložit text</button>
+            <button id="encryptCarrierFileBtn">Vložit soubor</button>
+          </div>
+          <div class="actions subtle">
+            <button id="downloadCarrierBtn">Stáhnout carrier</button>
+            <button id="downloadCarrierCapsuleBtn">Stáhnout kapsli</button>
+            <button id="downloadCarrierCheckBtn">Stáhnout kontrolu</button>
+          </div>
+        </article>
+        <article class="card">
+          <h2>Dešifrovat carrier</h2>
+          <label>Carrier soubor<input id="carrierDecryptFile" type="file" /></label>
+          <label>Carrier kapsle<input id="carrierCapsuleFile" type="file" accept=".qes128,.txt" /></label>
+          <div class="actions">
+            <button id="decryptCarrierBtn">Dešifrovat carrier</button>
+            <button id="downloadCarrierPlainBtn">Stáhnout výstup</button>
+          </div>
+          <h3>Ověření souboru</h3>
+          <label>Soubor k ověření<input id="verifyFile" type="file" /></label>
+          <label>Očekávaný public hash<input id="expectedHash" /></label>
+          <label>Očekávaný keyed MAC<input id="expectedMac" /></label>
+          <button id="verifyBtn">Ověřit hash / MAC</button>
+          <pre id="verifyOutput" class="pre"></pre>
+        </article>
+      </div>
+    </section>
+
+    <section id="diagPanel" class="panel">
+      <div class="grid two">
+        <article class="card">
+          <h2>Diagnostika</h2>
+          <p class="copy">Diagnostika je oddělená od normálního režimu. Ukáže proměnné, skoky, obrazy, rychlost a testy vrstev.</p>
+          <label class="check"><input id="includeFrames" type="checkbox" checked /> Vytvořit obrazy skoků</label>
+          <div class="actions">
+            <button id="diagnoseTextBtn">Diagnostika textu</button>
+            <button id="diagnoseFileBtn">Diagnostika souboru</button>
+            <button id="runTestsBtn">Spustit testy</button>
+            <button id="downloadReportBtn">Stáhnout JSON log</button>
+          </div>
+          <textarea id="diagnosticOutput" readonly spellcheck="false"></textarea>
+        </article>
+        <article class="card">
+          <h2>Obraz skoku</h2>
+          <select id="frameSelect"></select>
+          <div class="actions"><button id="downloadFrameBtn">Stáhnout obraz</button></div>
+          <textarea id="framePreview" readonly spellcheck="false"></textarea>
+        </article>
+      </div>
+    </section>
+
+    <section id="manualPanel" class="panel">
+      <article class="card manual architectureManual">
+        <div class="sectionTitle">
+          <div>
+            <p class="kicker">QES – Quantum Encryption System • architektura prototypu</p>
+            <h2>Jak QES funguje</h2>
+          </div>
+          <span class="badge">PROTOTYP • SYMETRICKÝ SYSTÉM</span>
+        </div>
+
+        <p class="manualIntro"><b>QES je výzkumný prototyp.</b> Není prezentovaný jako hotový auditovaný standard ani jako neprolomitelná vojenská šifra. Je navržený jako symetrický, quantum-hard směřovaný systém: stejná sada tajemství vytváří šifrovací i dešifrovací navigaci.</p>
+
+        <div class="diagramBlock">
+          <h3>Celkový tok</h3>
+          <pre class="diagram">TAJNÁ DATA
+   │
+   ▼
+PASSWORD + SEED1–4 + PARTICLE
+   │
+   ▼
+ARGON2ID / KDF
+   │
+   ▼
+MASTER SEED
+   │
+   ├── hidden_nonce
+   ├── hidden_iv
+   ├── route_seed
+   ├── tag_keys
+   └── mac_key
+   │
+   ▼
+QES CORE
+permutace → difuze → superpozice → rotace → XOR/ARX prvky → tagové masky
+   │
+   ▼
+ENCRYPTED CORE
+   │
+   ├── Normal Mode → QES soubor
+   └── Adaptive Labyrinth Cover → cover prostor / další etapa
+   │
+   ▼
+FINÁLNÍ SOUBOR + QES-128 KAPSLE + PUBLIC HASH + KEYED MAC</pre>
+        </div>
+
+        <div class="explainGrid">
+          <section class="explainCard">
+            <h3>Co je symetrické</h3>
+            <p>Symetrické znamená, že stejná tajná sada vstupů slouží pro šifrování i pro návrat zpět. QES nepracuje s veřejným a soukromým klíčem. Pracuje s navigací z passwordu, seedů a particle.</p>
+          </section>
+          <section class="explainCard">
+            <h3>Co není QES Core</h3>
+            <p>QES Core není pouze XOR a není pouze ARX. XOR a ARX jsou dílčí vrstvy. Celé jádro je vícevrstvá vratná transformace s permutací, difuzí, superpozicí, rotací, maskami a kontrolou.</p>
+          </section>
+          <section class="explainCard">
+            <h3>Co je kapsle</h3>
+            <p>QES‑128 kapsle je samostatný artefakt pro uživatele. Není přilepená k souboru. Neobsahuje heslo ani plaintext. Pomáhá ověřit soubor, režim a správnost klíčové navigace.</p>
+          </section>
+          <section class="explainCard">
+            <h3>Co znamená quantum-hard</h3>
+            <p>QES míří na vysokou rezervu proti brute-force útokům: dlouhé tajemství, Argon2id, master seed, MAC a oddělené derivace. Formální tvrzení o bezpečnosti vyžaduje nezávislý kryptografický audit.</p>
+          </section>
+        </div>
+
+        <div class="tableModule" id="termsTableModule">
+          <div class="tableHead">
+            <h3>Pojmy v aplikaci</h3>
+            <button class="miniBtn" data-expand-target="termsTableModule">Rozšířit tabulku</button>
+          </div>
+          <div class="tableWrap">
+            <table class="moduleTable">
+              <thead><tr><th>Pojem</th><th>Jednoduché vysvětlení</th><th>Role v QES</th></tr></thead>
+              <tbody>
+                <tr><td>Password</td><td>Hlavní tajná fráze.</td><td>Vstup pro KDF a navigaci.</td></tr>
+                <tr><td>Seed1–Seed4</td><td>Další tajné části.</td><td>Zvyšují entropii a mění celý master seed.</td></tr>
+                <tr><td>Particle</td><td>Znak, hodnota, vektor, fáze a amplituda.</td><td>Ovlivňuje vlnu, trasu a kontrolní vrstvy.</td></tr>
+                <tr><td>Argon2id</td><td>Paměťově náročné odvození klíče.</td><td>Brání levnému hádání hesla.</td></tr>
+                <tr><td>Master seed</td><td>Hlavní vnitřní kořen systému.</td><td>Odvozuje hidden_iv, route_seed, tagy a MAC.</td></tr>
+                <tr><td>Hidden nonce</td><td>Skrytá proměnná hodnota.</td><td>Způsobí odlišný výstup i pro stejný plaintext.</td></tr>
+                <tr><td>Route seed</td><td>Navigační seed.</td><td>Řídí skoky, permutace a labyrintovou trasu.</td></tr>
+                <tr><td>Encrypted core</td><td>Vnitřní šifrované jádro.</td><td>Čistý výsledek QES Core.</td></tr>
+                <tr><td>QES‑128 kapsle</td><td>128B samostatný artefakt.</td><td>Kontrola, kotva, maskovaná délka a MAC.</td></tr>
+                <tr><td>Public hash</td><td>Veřejný otisk souboru.</td><td>Zjistí změnu souboru bez klíče.</td></tr>
+                <tr><td>Keyed MAC</td><td>Otisk počítaný s klíčem.</td><td>Ověří soubor, kapsli, režim a tajnou navigaci.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="diagramBlock">
+          <h3>QES Core není jedna operace</h3>
+          <pre class="diagram">plaintext
+   │
+   ▼
+[1] PERMUTACE
+    tajné přeuspořádání dat podle route_seed
+   │
+   ▼
+[2] DIFUZE A
+    změna jednoho bajtu se rozlévá dál
+   │
+   ▼
+[3] SUPERPOZICE
+    kombinace dat, proudu, fáze, pozice a stavu
+   │
+   ▼
+[4] ROTACE / ARX PRVKY
+    add + rotate + xor jako vratná transformační vrstva
+   │
+   ▼
+[5] DIFUZE B
+    druhé rozlití změn přes datový proud
+   │
+   ▼
+[6] TAGOVÉ A MASKOVACÍ VRSTVY
+    kontrola a masky bez ztráty dat
+   │
+   ▼
+encrypted_core</pre>
+        </div>
+
+        <div class="tableModule" id="layersTableModule">
+          <div class="tableHead">
+            <h3>Vrstvy QES Core</h3>
+            <button class="miniBtn" data-expand-target="layersTableModule">Rozšířit tabulku</button>
+          </div>
+          <div class="tableWrap">
+            <table class="moduleTable">
+              <thead><tr><th>Vrstva</th><th>Co dělá</th><th>Proč je důležitá</th><th>Vrácení při dešifrování</th></tr></thead>
+              <tbody>
+                <tr><td>Permutace</td><td>Přehází pořadí bajtů.</td><td>Skryje přímou pozici původních dat.</td><td>Inverse permutace.</td></tr>
+                <tr><td>Difuze</td><td>Rozlije změny přes další bajty.</td><td>Změna jednoho bitu má ovlivnit velkou část výstupu.</td><td>Inverse difuze.</td></tr>
+                <tr><td>Superpozice</td><td>Kombinuje hodnotu dat s proudem, fází a pozicí.</td><td>Ztěžuje jednoduchý vztah mezi vstupem a výstupem.</td><td>Opačná superpozice.</td></tr>
+                <tr><td>Rotace</td><td>Otáčí bity uvnitř hodnot.</td><td>Mění bitovou strukturu vratným způsobem.</td><td>Opačná rotace.</td></tr>
+                <tr><td>ARX prvky</td><td>Add, Rotate, XOR.</td><td>Přidávají další míchání hodnot.</td><td>Opačné pořadí operací.</td></tr>
+                <tr><td>XOR masky</td><td>Maskují data proudem z klíče.</td><td>Bez stejného proudu nejde data vrátit.</td><td>XOR stejnou maskou.</td></tr>
+                <tr><td>TAG/MAC</td><td>Ověřují integritu.</td><td>Změna souboru, kapsle nebo klíče se detekuje.</td><td>Nejde „vrátit“, pouze ověřit.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="diagramBlock">
+          <h3>Šifrování a dešifrování jsou symetrické</h3>
+          <pre class="diagram">ŠIFROVÁNÍ
+password + seedy + particle → master_seed → QES Core → finální soubor + kapsle
+
+DEŠIFROVÁNÍ
+stejný password + stejné seedy + stejná particle + kapsle → stejný master_seed → inverse QES Core → původní data
+
+Když se změní jeden vstup:
+password / seed / particle / soubor / kapsle / režim
+   ↓
+MAC nebo TAG nesedí
+   ↓
+dešifrování se zastaví</pre>
+        </div>
+
+        <div class="tableModule" id="modesTableModule">
+          <div class="tableHead">
+            <h3>Režimy QES</h3>
+            <button class="miniBtn" data-expand-target="modesTableModule">Rozšířit tabulku</button>
+          </div>
+          <div class="tableWrap">
+            <table class="moduleTable">
+              <thead><tr><th>Režim</th><th>Výstup</th><th>Kdy použít</th><th>Stav</th></tr></thead>
+              <tbody>
+                <tr><td>Normal Mode</td><td>QES soubor + QES‑128 kapsle + hash/MAC.</td><td>Běžné šifrování textu a souboru.</td><td>Aktivní.</td></tr>
+                <tr><td>Carrier Compatibility</td><td>Carrier soubor + kapsle.</td><td>Přechodová kompatibilita před plným labyrintem.</td><td>Experimentální.</td></tr>
+                <tr><td>Adaptive Labyrinth Cover</td><td>Finální cover soubor + kapsle.</td><td>Rozložení payloadu do prostoru coveru podle klíče.</td><td>Následující etapa.</td></tr>
+                <tr><td>Diagnostic Mode</td><td>Report, obrazy skoků, rychlost, testy.</td><td>Audit, vývoj a kontrola vrstev.</td><td>Aktivní.</td></tr>
+                <tr><td>Tails CLI</td><td>Příkazový offline nástroj.</td><td>Tails/Linux bez síťových závislostí.</td><td>Základ připraven.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="diagramBlock">
+          <h3>Adaptive Labyrinth Cover – cílový princip</h3>
+          <pre class="diagram">cover soubor = velký prostor bodů
+klíč = navigace
+seed = motor labyrintu
+startovní bod = začátek trasy
+body na křivce = úložiště payloadu
+
+TAJNÁ DATA → QES CORE → payload stream
+                         │
+                         ▼
+PASSWORD + SEEDY + PARTICLE → start → labyrint → body
+                         │
+                         ▼
+PAYLOAD SE ROZLOŽÍ DO BODŮ COVER SOUBORU
+                         │
+                         ▼
+FINÁLNÍ COVER SOUBOR + QES‑128 KAPSLE</pre>
+        </div>
+
+        <div class="tableModule" id="securityTableModule">
+          <div class="tableHead">
+            <h3>Bezpečnostní formulace</h3>
+            <button class="miniBtn" data-expand-target="securityTableModule">Rozšířit tabulku</button>
+          </div>
+          <div class="tableWrap">
+            <table class="moduleTable">
+              <thead><tr><th>Bezpečně říkat</th><th>Neříkat bez auditu</th><th>Důvod</th></tr></thead>
+              <tbody>
+                <tr><td>Výzkumný prototyp.</td><td>Hotový standard.</td><td>Algoritmus ještě nemá nezávislý audit.</td></tr>
+                <tr><td>Quantum-hard směr proti brute-force.</td><td>Kvantově neprolomitelné.</td><td>Kvantová odolnost závisí na celé konstrukci a entropii vstupů.</td></tr>
+                <tr><td>Testy ověřují vrstvy a detekci změn.</td><td>Testy dokazují absolutní bezpečnost.</td><td>Testy nenahrazují kryptoanalýzu.</td></tr>
+                <tr><td>MAC detekuje změnu souboru/kapsle.</td><td>MAC zabrání všem útokům.</td><td>MAC řeší integritu, ne všechny možné implementační chyby.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="card historyCard">
+      <div class="historyHead">
+        <h2>Historie a lokální log</h2>
+        <button id="downloadLogBtn">Stáhnout log</button>
+        <button id="clearLogBtn">Vyčistit</button>
+      </div>
+      <div id="history" class="history"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+/target
+Cargo.lock
+*.qcs.txt
+*.bin
