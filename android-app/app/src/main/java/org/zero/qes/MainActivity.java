@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.8b-alpha";
-    private final String patchVersion = "P-2026-05-31-10B";
+    private final String appVersion = "0.11.9-alpha";
+    private final String patchVersion = "P-2026-05-31-11-VERIFY-FIRST-PREP";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -2589,4 +2589,209 @@ public class MainActivity extends Activity {
         s.setLayoutParams(new LinearLayout.LayoutParams(1, h));
         return s;
     }
+
+    // ============================================================
+    // QES VERIFY-FIRST STREAM HELPERS
+    // P-2026-05-31-11-VERIFY-FIRST-PREP
+    //
+    // Smysl:
+    // - nikdy nepřepisovat cílový soubor dřív, než projde ověření,
+    // - dešifrovat nejdřív do dočasného souboru,
+    // - po úspěchu atomicky nahradit výstup,
+    // - při chybě dočasný soubor smazat,
+    // - porovnání hash/MAC dělat constant-time stylem.
+    //
+    // Tyto helpery nesmí logovat hesla, seedy, route seed, hidden IV,
+    // MAC key ani jiné tajné hodnoty.
+    // ============================================================
+
+    private boolean qesVerifyFirstStreamHelpersInstalled() {
+        return true;
+    }
+
+    private java.io.File qesMakeTempOutputFile(java.io.File finalOutputFile) throws java.io.IOException {
+        java.io.File parent = finalOutputFile.getParentFile();
+        if (parent == null) {
+            parent = new java.io.File(".");
+        }
+
+        String baseName = finalOutputFile.getName();
+        if (baseName == null || baseName.trim().isEmpty()) {
+            baseName = "qes-output";
+        }
+
+        java.io.File tmp = java.io.File.createTempFile(baseName + ".", ".qes.tmp", parent);
+        return tmp;
+    }
+
+    private void qesDeleteQuietly(java.io.File file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            if (file.exists()) {
+                boolean ignored = file.delete();
+            }
+        } catch (Throwable ignored) {
+            // Záměrně nelogovat citlivé cesty ani tajné hodnoty.
+        }
+    }
+
+    private void qesAtomicReplaceFile(java.io.File tempFile, java.io.File finalFile) throws java.io.IOException {
+        if (tempFile == null || finalFile == null) {
+            throw new java.io.IOException("QES atomic replace: chybí dočasný nebo cílový soubor.");
+        }
+
+        if (!tempFile.exists()) {
+            throw new java.io.IOException("QES atomic replace: dočasný soubor neexistuje.");
+        }
+
+        java.nio.file.Path tempPath = tempFile.toPath();
+        java.nio.file.Path finalPath = finalFile.toPath();
+
+        try {
+            java.nio.file.Files.move(
+                tempPath,
+                finalPath,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE
+            );
+        } catch (java.nio.file.AtomicMoveNotSupportedException atomicMoveNotSupported) {
+            java.nio.file.Files.move(
+                tempPath,
+                finalPath,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            );
+        }
+    }
+
+    private byte[] qesSha256FileBytes(java.io.File file) throws java.io.IOException {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[1024 * 256];
+
+            try (java.io.InputStream in = new java.io.BufferedInputStream(new java.io.FileInputStream(file))) {
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+
+            return digest.digest();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new java.io.IOException("SHA-256 není dostupné v zařízení.", e);
+        }
+    }
+
+    private String qesHex(byte[] data) {
+        if (data == null) {
+            return "";
+        }
+
+        char[] hex = new char[data.length * 2];
+        final char[] alphabet = "0123456789abcdef".toCharArray();
+
+        for (int i = 0; i < data.length; i++) {
+            int v = data[i] & 0xff;
+            hex[i * 2] = alphabet[v >>> 4];
+            hex[i * 2 + 1] = alphabet[v & 0x0f];
+        }
+
+        return new String(hex);
+    }
+
+    private String qesSha256FileHex(java.io.File file) throws java.io.IOException {
+        return qesHex(qesSha256FileBytes(file));
+    }
+
+    private boolean qesConstantTimeEquals(byte[] a, byte[] b) {
+        if (a == null || b == null) {
+            return false;
+        }
+
+        int diff = a.length ^ b.length;
+        int max = Math.max(a.length, b.length);
+
+        for (int i = 0; i < max; i++) {
+            byte av = i < a.length ? a[i] : 0;
+            byte bv = i < b.length ? b[i] : 0;
+            diff |= av ^ bv;
+        }
+
+        return diff == 0;
+    }
+
+    private byte[] qesHexToBytes(String hex) throws java.io.IOException {
+        if (hex == null) {
+            throw new java.io.IOException("QES hex decode: vstup je prázdný.");
+        }
+
+        String clean = hex.trim();
+        if ((clean.length() & 1) != 0) {
+            throw new java.io.IOException("QES hex decode: lichá délka.");
+        }
+
+        byte[] out = new byte[clean.length() / 2];
+
+        for (int i = 0; i < out.length; i++) {
+            int hi = Character.digit(clean.charAt(i * 2), 16);
+            int lo = Character.digit(clean.charAt(i * 2 + 1), 16);
+
+            if (hi < 0 || lo < 0) {
+                throw new java.io.IOException("QES hex decode: neplatný znak.");
+            }
+
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+
+        return out;
+    }
+
+    private boolean qesConstantTimeHexEquals(String expectedHex, String actualHex) throws java.io.IOException {
+        return qesConstantTimeEquals(qesHexToBytes(expectedHex), qesHexToBytes(actualHex));
+    }
+
+    private void qesCopyStream(java.io.InputStream in, java.io.OutputStream out) throws java.io.IOException {
+        byte[] buffer = new byte[1024 * 256];
+        int read;
+
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+    }
+
+    private void qesEnsureReadableFile(java.io.File file) throws java.io.IOException {
+        if (file == null) {
+            throw new java.io.IOException("Soubor není vybraný.");
+        }
+        if (!file.exists()) {
+            throw new java.io.IOException("Soubor neexistuje.");
+        }
+        if (!file.isFile()) {
+            throw new java.io.IOException("Vybraná cesta není soubor.");
+        }
+        if (!file.canRead()) {
+            throw new java.io.IOException("Soubor nelze číst.");
+        }
+    }
+
+    private void qesEnsureWritableParent(java.io.File file) throws java.io.IOException {
+        if (file == null) {
+            throw new java.io.IOException("Výstupní soubor není určený.");
+        }
+
+        java.io.File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            boolean created = parent.mkdirs();
+            if (!created && !parent.exists()) {
+                throw new java.io.IOException("Nelze vytvořit výstupní složku.");
+            }
+        }
+
+        if (parent != null && !parent.canWrite()) {
+            throw new java.io.IOException("Do výstupní složky nelze zapisovat.");
+        }
+    }
+
+
 }
