@@ -3,6 +3,9 @@ package org.zero.qes;
 import android.app.Activity;
 import android.os.Bundle;
 import android.content.Intent;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -12,7 +15,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Space;
@@ -21,61 +23,80 @@ import android.widget.TextView;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends Activity {
     private static final int REQ_SECRET_FILE = 100;
     private static final int REQ_QES_FILE = 101;
     private static final int REQ_COVER_FILE = 102;
     private static final int REQ_COVER_FINAL = 103;
+    private static final int REQ_VERIFY_FILE = 104;
     private static final int REQ_SAVE_FILE = 200;
 
-    private static final byte[] COVER_BEGIN = "\n-----BEGIN QES COVER PAYLOAD V1-----\n".getBytes();
-    private static final byte[] COVER_END = "\n-----END QES COVER PAYLOAD V1-----\n".getBytes();
+    private static final byte[] COVER_BEGIN = "\n-----BEGIN QES COVER PAYLOAD V1-----\n".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] COVER_END = "\n-----END QES COVER PAYLOAD V1-----\n".getBytes(StandardCharsets.UTF_8);
+
+    private final SecureRandom random = new SecureRandom();
 
     private LinearLayout content;
     private TextView status;
-    private EditText passwordField, seed1Field, seed2Field, seed3Field, seed4Field;
-    private EditText glyphField, valueField, vectorField, phaseField, amplitudeField;
-    private EditText textInput, textOutput, logBox;
+
+    private EditText passwordField;
+    private EditText baseSeedField;
+    private EditText extraSeedsField;
+    private EditText glyphField;
+    private EditText valueField;
+    private EditText vectorField;
+    private EditText phaseField;
+    private EditText amplitudeField;
+    private EditText textInput;
+    private EditText textOutput;
+    private EditText verifyInput;
+    private EditText verifyExpectedHash;
+    private EditText verifyExpectedMac;
+    private EditText logBox;
 
     private Uri secretUri;
     private Uri qesUri;
     private Uri coverUri;
     private Uri coverFinalUri;
+    private Uri verifyUri;
 
     private byte[] pendingSaveBytes;
     private String pendingSaveName = "qes_output.bin";
     private String pendingSaveMime = "application/octet-stream";
 
+    private byte[] lastOutputBytes;
+    private byte[] lastCapsule128;
+    private String lastReport = "";
+    private String lastMode = "NONE";
+
     private boolean dark = true;
     private String currentPage = "overview";
 
     private String pass = "qes-demo-password";
-    private String s1 = "seed-111";
-    private String s2 = "seed-222";
-    private String s3 = "seed-333";
-    private String s4 = "seed-444";
+    private String baseSeed = "seed-main";
+    private String extraSeeds = "";
     private String glyph = "X";
     private int particleValue = 77;
-    private String vector = "vektor";
+    private String vector = "vector-zero";
     private long phase = 13L;
     private int amplitude = 9;
+    private String artProfile = "ZERO GRID";
 
-    private StringBuilder log = new StringBuilder();
+    private final StringBuilder log = new StringBuilder();
 
-    private int BG;
-    private int PANEL;
-    private int CARD;
-    private int TEXT;
-    private int MUTED;
-    private int ACCENT;
-    private int GOOD;
-    private int BAD;
+    private int BG, PANEL, CARD, FIELD, TEXT, MUTED, ACCENT, ACCENT2, GOOD, BAD;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -89,23 +110,27 @@ public class MainActivity extends Activity {
 
     private void applyColors() {
         if (dark) {
-            BG = Color.rgb(4, 5, 10);
-            PANEL = Color.rgb(10, 12, 20);
-            CARD = Color.rgb(18, 21, 32);
-            TEXT = Color.rgb(238, 242, 250);
-            MUTED = Color.rgb(150, 158, 174);
-            ACCENT = Color.rgb(120, 235, 255);
-            GOOD = Color.rgb(120, 255, 185);
-            BAD = Color.rgb(255, 110, 110);
+            BG = Color.rgb(3, 5, 10);
+            PANEL = Color.rgb(8, 11, 18);
+            CARD = Color.rgb(16, 20, 32);
+            FIELD = Color.rgb(10, 13, 22);
+            TEXT = Color.rgb(238, 243, 252);
+            MUTED = Color.rgb(145, 154, 172);
+            ACCENT = Color.rgb(116, 235, 255);
+            ACCENT2 = Color.rgb(185, 130, 255);
+            GOOD = Color.rgb(110, 255, 185);
+            BAD = Color.rgb(255, 105, 120);
         } else {
             BG = Color.rgb(246, 248, 252);
-            PANEL = Color.rgb(232, 236, 244);
+            PANEL = Color.rgb(226, 232, 242);
             CARD = Color.WHITE;
-            TEXT = Color.rgb(20, 24, 34);
-            MUTED = Color.rgb(88, 96, 112);
-            ACCENT = Color.rgb(0, 88, 140);
-            GOOD = Color.rgb(0, 125, 75);
-            BAD = Color.rgb(190, 40, 40);
+            FIELD = Color.rgb(238, 242, 248);
+            TEXT = Color.rgb(18, 24, 34);
+            MUTED = Color.rgb(88, 98, 115);
+            ACCENT = Color.rgb(0, 95, 145);
+            ACCENT2 = Color.rgb(95, 55, 160);
+            GOOD = Color.rgb(0, 130, 80);
+            BAD = Color.rgb(190, 45, 55);
         }
     }
 
@@ -122,7 +147,7 @@ public class MainActivity extends Activity {
         head.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title = text("QES", 34, TEXT, true);
-        title.setLetterSpacing(0.14f);
+        title.setLetterSpacing(0.16f);
         head.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         Button theme = smallButton(dark ? "SVĚTLÝ" : "TMAVÝ");
@@ -134,11 +159,10 @@ public class MainActivity extends Activity {
             rebuildCurrentPage();
         });
         head.addView(theme);
+
         root.addView(head);
-
-        root.addView(text("Quantum Encryption System · native APK · ZERO", 13, MUTED, false));
+        root.addView(text("Quantum Encryption System · APK · ZERO", 13, MUTED, false));
         root.addView(space(12));
-
         root.addView(nav());
 
         content = new LinearLayout(this);
@@ -160,22 +184,27 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(PANEL);
         box.setPadding(6, 6, 6, 6);
 
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.addView(navButton("PŘEHLED", "overview"));
-        row1.addView(navButton("KLÍČ", "key"));
-        row1.addView(navButton("TEXT", "text"));
-        row1.addView(navButton("SOUBOR", "file"));
+        LinearLayout r1 = row();
+        r1.addView(navButton("PŘEHLED", "overview"));
+        r1.addView(navButton("KLÍČ", "key"));
+        r1.addView(navButton("ART", "art"));
+        r1.addView(navButton("TEXT", "text"));
 
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.addView(navButton("COVER", "cover"));
-        row2.addView(navButton("OVĚŘENÍ", "verify"));
-        row2.addView(navButton("DIAGNOSTIKA", "diag"));
-        row2.addView(navButton("ARCHITEKTURA", "arch"));
+        LinearLayout r2 = row();
+        r2.addView(navButton("SOUBOR", "file"));
+        r2.addView(navButton("COVER", "cover"));
+        r2.addView(navButton("OVĚŘENÍ", "verify"));
+        r2.addView(navButton("TESTY", "diag"));
 
-        box.addView(row1);
-        box.addView(row2);
+        LinearLayout r3 = row();
+        r3.addView(navButton("ARCH", "arch"));
+        r3.addView(navButton("LOG", "log"));
+        r3.addView(navButton("MAC", "mac"));
+        r3.addView(navButton("ZERO", "zero"));
+
+        box.addView(r1);
+        box.addView(r2);
+        box.addView(r3);
         return box;
     }
 
@@ -183,9 +212,9 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setAllCaps(false);
         b.setText(label);
-        b.setTextSize(11);
-        b.setTextColor(page.equals(currentPage) ? ACCENT : TEXT);
-        b.setBackgroundColor(page.equals(currentPage) ? CARD : PANEL);
+        b.setTextSize(10);
+        b.setTextColor(page.equals(currentPage) ? (dark ? Color.BLACK : Color.WHITE) : TEXT);
+        b.setBackgroundColor(page.equals(currentPage) ? ACCENT : PANEL);
         b.setOnClickListener(v -> {
             saveKeyState();
             currentPage = page;
@@ -200,12 +229,16 @@ public class MainActivity extends Activity {
 
     private void rebuildCurrentPage() {
         if ("key".equals(currentPage)) showKey();
+        else if ("art".equals(currentPage)) showArt();
         else if ("text".equals(currentPage)) showText();
         else if ("file".equals(currentPage)) showFile();
         else if ("cover".equals(currentPage)) showCover();
         else if ("verify".equals(currentPage)) showVerify();
         else if ("diag".equals(currentPage)) showDiagnostics();
         else if ("arch".equals(currentPage)) showArchitecture();
+        else if ("log".equals(currentPage)) showLog();
+        else if ("mac".equals(currentPage)) showMac();
+        else if ("zero".equals(currentPage)) showZero();
         else showOverview();
     }
 
@@ -214,52 +247,82 @@ public class MainActivity extends Activity {
         status.setText("");
         textInput = null;
         textOutput = null;
+        verifyInput = null;
+        verifyExpectedHash = null;
+        verifyExpectedMac = null;
         logBox = null;
     }
 
     private void showOverview() {
         clear();
         currentPage = "overview";
-        hero("FINÁLNÍ APK PROTOTYP",
-                "Nativní Android aplikace QES. Bez Termux serveru, bez ručního odkazu. Rozhraní je rozdělené na samostatné stránky pro klíč, text, soubory, cover, ověření, diagnostiku a architekturu.");
-        card("Co už funguje",
-                "• Rust core je načtený přes JNI\n• textové šifrování a dešifrování\n• souborové šifrování přes Android výběr souboru\n• ukládání výstupů přes systémové ukládání\n• cover carrier režim\n• logy a diagnostika\n• tmavý a světlý motiv");
-        card("Bezpečnostní poznámka",
-                "QES je vývojový prototyp. Testy ověřují chování implementace, roundtrip, citlivost na klíč a detekci změn. Nejde o formální kryptografický audit.");
-        card("Doporučený postup",
-                "1) Nastav klíč a seedy.\n2) Otestuj text.\n3) Otestuj soubor.\n4) Otestuj cover.\n5) V diagnostice spusť testy a ulož log.");
+        hero("QES CONTROL DECK",
+                "Finálně pojatá APK verze. Každý režim má vlastní stránku. Text, soubor, cover, ověření, testy, logy, MAC a architektura jsou oddělené tak, aby aplikace působila přehledně i technicky.");
+        metrics("REŽIM", "APK", "CORE", "RUST JNI", "MOTIV", dark ? "DARK" : "LIGHT");
+        card("Funkční vrstvy",
+                "• dynamické seedy: základní seed + libovolné další seedy\n• ASCII art profily jako volitelné dlaždice\n• textové šifrování a dešifrování\n• souborové šifrování a dešifrování\n• cover carrier s payloadem\n• MAC report pro text, soubor i cover\n• ověření podle hash/MAC\n• diagnostika a uložitelný log");
+        card("Bezpečnostní rámec",
+                "QES je vývojový prototyp. Diagnostické testy jsou tvrdé indikátory chování, nikoli formální kryptografický audit. Formální bezpečnost by vyžadovala nezávislou kryptografickou analýzu.");
     }
 
     private void showKey() {
         clear();
         currentPage = "key";
-        section("NAVIGACE A KLÍČ");
-        addKeyPanel();
-        card("Jak QES používá klíč",
-                "Password + Seed 1–4 + Particle tvoří navigaci. Z ní vzniká master seed, hidden IV, route seed, masky, tagové klíče a MAC klíč. Bez stejné navigace se data nesloží zpět.");
-        card("Particle",
-                "Particle je doplňkový navigační prvek: glyph, value, vector, phase a amplitude. Nejde o dekoraci, ale o další vstup do trasy a kontrolních vrstev.");
+        section("NAVIGACE / PASSWORD / SEEDY");
+        addKeyPanel(false);
+        card("Dynamické seedy",
+                "V základu používáš jeden hlavní seed. Další seedy můžeš přidávat jako řádky. APK je následně deterministicky složí do 4 interních seed slotů, které používá Rust core.");
+    }
+
+    private void showArt() {
+        clear();
+        currentPage = "art";
+        section("ASCII ART / TILE GENERATOR");
+        addCompactKeyPanel();
+
+        card("Aktuální ART profil", artProfile + "\n\n" + artPreview());
+
+        LinearLayout r1 = row();
+        r1.addView(action("ZERO GRID", v -> setArt("ZERO GRID")));
+        r1.addView(action("NEON WAVE", v -> setArt("NEON WAVE")));
+        content.addView(r1);
+
+        LinearLayout r2 = row();
+        r2.addView(action("VOID FIELD", v -> setArt("VOID FIELD")));
+        r2.addView(action("Q-CAPSULE", v -> setArt("Q-CAPSULE")));
+        content.addView(r2);
+
+        LinearLayout r3 = row();
+        r3.addView(action("RANDOM ART", v -> randomArt()));
+        r3.addView(action("ULOŽIT PROFIL", v -> {
+            saveKeyState();
+            status.setText("ART profil uložen do navigace.");
+        }));
+        content.addView(r3);
+
+        card("Jak ART ovlivňuje šifru",
+                "ART profil mění glyph, value, vector, phase a amplitude. Tím se mění particle navigace. V další generaci může být stejná stránka napojena na hlubší ASCII renderer přímo v Rust core.");
     }
 
     private void showText() {
         clear();
         currentPage = "text";
-        section("TEXTOVÝ REŽIM");
+        section("TEXT MODE");
         addCompactKeyPanel();
 
         textInput = area("Vstupní text nebo QES ASCII balík");
-        textOutput = area("Výstup");
+        textOutput = area("Výstup / QES balík / plaintext");
         content.addView(textInput);
 
-        LinearLayout row = row();
-        row.addView(action("ŠIFROVAT TEXT", v -> encryptTextAction()));
-        row.addView(action("DEŠIFROVAT TEXT", v -> decryptTextAction()));
-        content.addView(row);
+        LinearLayout r1 = row();
+        r1.addView(action("ŠIFROVAT", v -> encryptTextAction()));
+        r1.addView(action("DEŠIFROVAT", v -> decryptTextAction()));
+        content.addView(r1);
 
-        LinearLayout row2 = row();
-        row2.addView(action("KOPÍROVAT VÝSTUP", v -> copyOutput()));
-        row2.addView(action("ULOŽIT VÝSTUP", v -> saveTextOutput()));
-        content.addView(row2);
+        LinearLayout r2 = row();
+        r2.addView(action("KOPÍROVAT", v -> copyOutput()));
+        r2.addView(action("ULOŽIT", v -> saveTextOutput()));
+        content.addView(r2);
 
         content.addView(textOutput);
     }
@@ -267,11 +330,11 @@ public class MainActivity extends Activity {
     private void showFile() {
         clear();
         currentPage = "file";
-        section("SOUBOROVÝ REŽIM");
+        section("FILE MODE");
         addCompactKeyPanel();
 
-        card("Vstupy a výstupy",
-                "Vybereš libovolný soubor, QES ho převede do šifrovaného .qes balíku. Dešifrování vezme .qes balík a uloží původní data zpět.");
+        card("Souborový tok",
+                "Vstupní soubor → QES Rust core → encrypted .qes → MAC report. Dešifrování vezme .qes a obnoví původní data.");
 
         LinearLayout r1 = row();
         r1.addView(action("VYBRAT SOUBOR", v -> openFile(REQ_SECRET_FILE)));
@@ -283,20 +346,23 @@ public class MainActivity extends Activity {
         r2.addView(action("DEŠIFROVAT .QES", v -> decryptSelectedFile()));
         content.addView(r2);
 
-        card("Vybraný soubor", secretUri == null ? "Zatím nevybrán." : secretUri.toString());
-        card("Vybraný .qes", qesUri == null ? "Zatím nevybrán." : qesUri.toString());
-        card("Kontrola",
-                "Po uložení výstupu se do logu zapíše velikost a SHA-256. Interní TAG/MAC kontrola je součástí QES balíku a ověřuje se při dešifrování.");
+        LinearLayout r3 = row();
+        r3.addView(action("ULOŽIT MAC", v -> saveReport()));
+        r3.addView(action("ULOŽIT KAPSLI", v -> saveCapsule()));
+        content.addView(r3);
+
+        card("Vybraný vstup", secretUri == null ? "Nevybrán." : secretUri.toString());
+        card("Vybraný .qes", qesUri == null ? "Nevybrán." : qesUri.toString());
     }
 
     private void showCover() {
         clear();
         currentPage = "cover";
-        section("COVER REŽIM");
+        section("COVER MODE");
         addCompactKeyPanel();
 
-        card("Cover Carrier V1",
-                "Tato APK verze používá funkční cover carrier: vezme cover soubor, připojí k němu QES payload a výsledek uloží jako finální cover soubor. Dešifrování najde QES payload a obnoví tajná data.");
+        card("Cover carrier",
+                "Funkční cover režim přidá QES payload za cover soubor a vytvoří finální cover. Z finálního coveru se payload znovu najde a dešifruje. Současně vzniká MAC report a QES-128 kapsle.");
 
         LinearLayout r1 = row();
         r1.addView(action("TAJNÝ SOUBOR", v -> openFile(REQ_SECRET_FILE)));
@@ -310,88 +376,144 @@ public class MainActivity extends Activity {
 
         LinearLayout r3 = row();
         r3.addView(action("DEŠIFROVAT COVER", v -> decryptCoverCarrier()));
-        r3.addView(action("ULOŽIT LOG", v -> saveLog()));
+        r3.addView(action("ULOŽIT KAPSLI", v -> saveCapsule()));
         content.addView(r3);
 
-        card("Stav",
+        card("Stav coveru",
                 "Tajný soubor: " + (secretUri == null ? "nevybrán" : "vybrán") +
                 "\nCover soubor: " + (coverUri == null ? "nevybrán" : "vybrán") +
                 "\nFinální cover: " + (coverFinalUri == null ? "nevybrán" : "vybrán"));
-        card("Další vývoj",
-                "Finální Adaptive Labyrinth Cover bude místo připojení payloadu počítat body, trajektorii a kapacitu cover souboru. Tato APK už má připravený samostatný režim a ovládání.");
     }
 
     private void showVerify() {
         clear();
         currentPage = "verify";
-        section("OVĚŘENÍ");
-        card("Public hash",
-                "Public hash je veřejný otisk výstupního souboru. Když se soubor změní, hash se změní také.");
-        card("Keyed MAC / TAG",
-                "Keyed MAC a TAG kontrola ověřují, že soubor, režim a klíčová navigace patří k sobě. Při špatném hesle, seedu nebo particle se dešifrování zastaví.");
-        card("QES-128 kapsle",
-                "Kapsle je samostatný 128B artefakt. Neobsahuje heslo ani plaintext. Obsahuje kotvy, režim, maskovanou délku, final phase, file commitment a MAC. V této APK je stránka připravená; samostatné ukládání kapsle se doplní jako další nativní výstup.");
+        section("VERIFY / HASH / MAC");
+
+        card("Režim ověření",
+                "Ověřit lze text, soubor nebo cover. Vložíš očekávaný public hash a/nebo keyed MAC. Aplikace spočítá aktuální hodnoty a porovná je.");
+
+        verifyInput = area("Text k ověření nebo prázdné při ověření souboru");
+        verifyExpectedHash = field("Očekávaný public SHA-256", false, "");
+        verifyExpectedMac = field("Očekávaný keyed MAC", false, "");
+        content.addView(verifyInput);
+        content.addView(verifyExpectedHash);
+        content.addView(verifyExpectedMac);
+
+        LinearLayout r1 = row();
+        r1.addView(action("OVĚŘIT TEXT", v -> verifyText()));
+        r1.addView(action("VYBRAT SOUBOR", v -> openFile(REQ_VERIFY_FILE)));
+        content.addView(r1);
+
+        LinearLayout r2 = row();
+        r2.addView(action("OVĚŘIT SOUBOR", v -> verifySelectedFile("FILE")));
+        r2.addView(action("OVĚŘIT COVER", v -> verifySelectedFile("COVER")));
+        content.addView(r2);
+
+        card("Vybraný soubor pro ověření", verifyUri == null ? "Nevybrán." : verifyUri.toString());
     }
 
     private void showDiagnostics() {
         clear();
         currentPage = "diag";
-        section("DIAGNOSTIKA");
-        LinearLayout r = row();
-        r.addView(action("SPUSTIT TESTY", v -> runDiagnostics()));
-        r.addView(action("ULOŽIT LOG", v -> saveLog()));
-        content.addView(r);
+        section("DIAGNOSTIKA / TESTY");
+        LinearLayout r1 = row();
+        r1.addView(action("SPUSTIT TESTY", v -> runDiagnostics()));
+        r1.addView(action("TĚŽKÉ TESTY", v -> runHeavyDiagnostics()));
+        content.addView(r1);
 
         LinearLayout r2 = row();
-        r2.addView(action("VYČISTIT LOG", v -> clearLog()));
         r2.addView(action("RUST SELF TEST", v -> rustSelfTest()));
+        r2.addView(action("ULOŽIT LOG", v -> saveLog()));
         content.addView(r2);
+
+        LinearLayout r3 = row();
+        r3.addView(action("VYČISTIT LOG", v -> clearLog()));
+        r3.addView(action("ULOŽIT MAC", v -> saveReport()));
+        content.addView(r3);
 
         logBox = area("Diagnostický log");
         logBox.setText(log.toString());
         content.addView(logBox);
 
-        card("Co diagnostika kontroluje",
-                "• načtení Rust knihovny\n• textový roundtrip\n• binární roundtrip\n• špatný klíč\n• cover carrier roundtrip\n• rychlost v ms\n• SHA-256 výstupů\n• velikost vstupů a výstupů");
+        card("Testovací sada",
+                "Roundtrip text, roundtrip binární data, špatný klíč, změna dat, cover roundtrip, nonce divergence, entropy, monobit, byte diversity, chi-square, serial correlation, MAC/hash.");
     }
 
     private void showArchitecture() {
         clear();
         currentPage = "arch";
-        section("ARCHITEKTURA ŠIFRY");
-        card("Celkový tok",
-                "tajná data\n↓\npassword + seedy + particle\n↓\nArgon2id / KDF\n↓\nmaster seed\n↓\nskrytý stav QES\n↓\nQES Core\n↓\nencrypted core\n↓\nnormal / file / cover režim\n↓\nfinální výstup + ověření");
+        section("ARCHITEKTURA QES");
+        card("Tok systému",
+                "data → password + dynamické seedy + particle → KDF → hidden state → QES Core → encrypted core → režim text / file / cover → výstup + MAC + kapsle");
         card("QES Core",
-                "QES Core není jen XOR ani jen ARX. Je to sada vratných vrstev: permutace, difuze, superpozice, rotace, XOR masky, ARX prvky a tagové vrstvy.");
-        card("Pojmy",
-                "Password: hlavní tajná fráze.\nSeed: doplňkový tajný vstup.\nParticle: navigační prvek.\nHidden IV: skrytý startovní stav.\nRoute seed: navigace pro skoky a permutace.\nDifuze: rozlití změny přes data.\nMAC/TAG: kontrola integrity a správného klíče.");
+                "QES Core není jen XOR ani ARX. Je to sada vratných vrstev: permutace, difuze, superpozice, rotace, XOR masky, ARX prvky a tagové vrstvy.");
         card("Symetrie",
-                "Stejná navigace, která data zašifruje, je potřebná i k jejich obnově. QES je symetrický systém: kdo nemá stejné heslo, seedy a particle, nedostane původní data.");
+                "Stejná navigace, která data zašifruje, je potřebná i k jejich obnově. Kdo nemá password, seedy a particle, nemá správnou trasu.");
+        card("Cover",
+                "Současný cover carrier ukládá QES payload do finálního cover souboru. Adaptive Labyrinth Cover je navazující etapa: body, křivka, kapacita, rotace, permutace a návrat podle klíče.");
     }
 
-    private void addKeyPanel() {
+    private void showLog() {
+        clear();
+        currentPage = "log";
+        section("LOG");
+        LinearLayout r = row();
+        r.addView(action("ULOŽIT LOG", v -> saveLog()));
+        r.addView(action("VYČISTIT LOG", v -> clearLog()));
+        content.addView(r);
+        logBox = area("Log");
+        logBox.setText(log.toString());
+        content.addView(logBox);
+    }
+
+    private void showMac() {
+        clear();
+        currentPage = "mac";
+        section("MAC / CAPSULE");
+        card("Poslední režim", lastMode);
+        card("Poslední MAC report", lastReport.isEmpty() ? "Zatím nebyl vytvořen." : lastReport);
+        LinearLayout r = row();
+        r.addView(action("ULOŽIT MAC", v -> saveReport()));
+        r.addView(action("ULOŽIT KAPSLI", v -> saveCapsule()));
+        content.addView(r);
+    }
+
+    private void showZero() {
+        clear();
+        currentPage = "zero";
+        section("ZERO");
+        card("ZERO SIGNATURE",
+                "QES · Quantum Encryption System\nZERO interface\nSymmetric control deck\nNative Android APK\nRust core bridge");
+        metrics("ART", artProfile, "SEEDS", String.valueOf(1 + countExtraSeeds()), "MODE", dark ? "DARK" : "LIGHT");
+    }
+
+    private void addKeyPanel(boolean compact) {
         passwordField = field("Password", true, pass);
-        seed1Field = field("Seed 1", false, s1);
-        seed2Field = field("Seed 2", false, s2);
-        seed3Field = field("Seed 3", false, s3);
-        seed4Field = field("Seed 4", false, s4);
-        glyphField = field("Particle glyph", false, glyph);
+        baseSeedField = field("Seed hlavní", false, baseSeed);
+        extraSeedsField = area("Další seedy – každý seed na nový řádek");
+        extraSeedsField.setText(extraSeeds);
+
+        glyphField = field("ASCII glyph", false, glyph);
         valueField = field("Particle value 0–255", false, String.valueOf(particleValue));
         vectorField = field("Particle vector", false, vector);
         phaseField = field("Phase", false, String.valueOf(phase));
         amplitudeField = field("Amplitude 0–255", false, String.valueOf(amplitude));
 
         content.addView(passwordField);
-        content.addView(seed1Field);
-        content.addView(seed2Field);
-        content.addView(seed3Field);
-        content.addView(seed4Field);
+        content.addView(baseSeedField);
+
+        LinearLayout seedRow = row();
+        seedRow.addView(action("PŘIDAT SEED", v -> addSeed()));
+        seedRow.addView(action("VYČISTIT SEEDY", v -> clearExtraSeeds()));
+        content.addView(seedRow);
+
+        content.addView(extraSeedsField);
         content.addView(glyphField);
         content.addView(valueField);
         content.addView(vectorField);
         content.addView(phaseField);
         content.addView(amplitudeField);
-
         content.addView(action("ULOŽIT NAVIGACI", v -> {
             saveKeyState();
             status.setText("Navigace uložena.");
@@ -399,30 +521,118 @@ public class MainActivity extends Activity {
     }
 
     private void addCompactKeyPanel() {
-        addKeyPanel();
+        addKeyPanel(true);
+    }
+
+    private void addSeed() {
+        saveKeyState();
+        String next = "seed-" + (1 + countExtraSeeds() + 1) + "-" + shortHex(randomBytes(4));
+        if (extraSeeds.trim().isEmpty()) extraSeeds = next;
+        else extraSeeds = extraSeeds.trim() + "\n" + next;
+        addLog("Přidán seed: " + next);
+        setContentView(app());
+        rebuildCurrentPage();
+    }
+
+    private void clearExtraSeeds() {
+        extraSeeds = "";
+        addLog("Další seedy vyčištěny.");
+        setContentView(app());
+        rebuildCurrentPage();
+    }
+
+    private int countExtraSeeds() {
+        if (extraSeeds.trim().isEmpty()) return 0;
+        return extraSeeds.trim().split("\\R+").length;
     }
 
     private void saveKeyState() {
         if (passwordField == null) return;
         pass = passwordField.getText().toString();
-        s1 = seed1Field.getText().toString();
-        s2 = seed2Field.getText().toString();
-        s3 = seed3Field.getText().toString();
-        s4 = seed4Field.getText().toString();
-        glyph = glyphField.getText().toString().isEmpty() ? "X" : glyphField.getText().toString();
+        baseSeed = baseSeedField.getText().toString();
+        extraSeeds = extraSeedsField.getText().toString();
+        glyph = glyphField.getText().toString().trim().isEmpty() ? "X" : glyphField.getText().toString().trim();
         vector = vectorField.getText().toString();
         particleValue = parseInt(valueField.getText().toString(), 77, 0, 255);
         phase = parseLong(phaseField.getText().toString(), 13L);
         amplitude = parseInt(amplitudeField.getText().toString(), 9, 0, 255);
     }
 
+    private String[] derivedSeeds(String mode) {
+        String all = "mode=" + mode + "\nbase=" + baseSeed + "\nextra=" + extraSeeds + "\nart=" + artProfile + "\nvector=" + vector;
+        String h1 = sha256Quiet(("1|" + all).getBytes(StandardCharsets.UTF_8));
+        String h2 = sha256Quiet(("2|" + all).getBytes(StandardCharsets.UTF_8));
+        String h3 = sha256Quiet(("3|" + all).getBytes(StandardCharsets.UTF_8));
+        String seedA = baseSeed.trim().isEmpty() ? "seed-main" : baseSeed.trim();
+        return new String[]{
+                seedA,
+                "dyn-" + h1.substring(0, 32),
+                "dyn-" + h2.substring(0, 32),
+                "dyn-" + h3.substring(0, 32)
+        };
+    }
+
     private boolean keyReady(String context) {
         if (pass == null || pass.trim().isEmpty()) {
             addLog(context + ": FAIL - password nesmí být prázdný.");
-            status.setText("Password nesmí být prázdný. Zadej heslo v části KLÍČ.");
+            status.setText("Password nesmí být prázdný.");
+            return false;
+        }
+        if (baseSeed == null || baseSeed.trim().isEmpty()) {
+            addLog(context + ": FAIL - hlavní seed nesmí být prázdný.");
+            status.setText("Hlavní seed nesmí být prázdný.");
             return false;
         }
         return true;
+    }
+
+    private void setArt(String profile) {
+        saveKeyState();
+        artProfile = profile;
+        if ("ZERO GRID".equals(profile)) {
+            glyph = "X"; particleValue = 77; vector = "zero-grid"; phase = 13; amplitude = 9;
+        } else if ("NEON WAVE".equals(profile)) {
+            glyph = "~"; particleValue = 144; vector = "neon-wave"; phase = 21; amplitude = 34;
+        } else if ("VOID FIELD".equals(profile)) {
+            glyph = "."; particleValue = 201; vector = "void-field"; phase = 55; amplitude = 89;
+        } else if ("Q-CAPSULE".equals(profile)) {
+            glyph = "#"; particleValue = 233; vector = "q-capsule"; phase = 128; amplitude = 64;
+        }
+        addLog("ART profil nastaven: " + profile);
+        setContentView(app());
+        showArt();
+    }
+
+    private void randomArt() {
+        saveKeyState();
+        String chars = "X#@%&*+=-~:.<>[]{}";
+        glyph = String.valueOf(chars.charAt(random.nextInt(chars.length())));
+        particleValue = random.nextInt(256);
+        vector = "random-art-" + shortHex(randomBytes(6));
+        phase = Math.abs(random.nextLong() % 4096L);
+        amplitude = random.nextInt(256);
+        artProfile = "RANDOM-" + shortHex(randomBytes(3));
+        addLog("Náhodný ART profil: " + artProfile);
+        setContentView(app());
+        showArt();
+    }
+
+    private String artPreview() {
+        String seed = artProfile + glyph + particleValue + vector + phase + amplitude;
+        String h = sha256Quiet(seed.getBytes(StandardCharsets.UTF_8));
+        String palette = "X#@%&*+=-~:. ";
+        StringBuilder sb = new StringBuilder();
+        sb.append("┌────────────────────┐\n");
+        for (int y = 0; y < 8; y++) {
+            sb.append("│");
+            for (int x = 0; x < 20; x++) {
+                int idx = Math.abs((h.charAt((x + y * 3) % h.length()) + x * 7 + y * 11)) % palette.length();
+                sb.append(palette.charAt(idx));
+            }
+            sb.append("│\n");
+        }
+        sb.append("└────────────────────┘");
+        return sb.toString();
     }
 
     private void encryptTextAction() {
@@ -430,14 +640,18 @@ public class MainActivity extends Activity {
         if (!keyReady("Text encrypt")) return;
         try {
             long started = System.currentTimeMillis();
+            String[] ds = derivedSeeds("TEXT");
             String result = QesNative.encryptText(
-                    textInput.getText().toString(), pass, s1, s2, s3, s4,
+                    textInput.getText().toString(), pass, ds[0], ds[1], ds[2], ds[3],
                     glyph, particleValue, vector, phase, amplitude
             );
+            if (result.startsWith("QES_ERROR")) throw new IllegalStateException(result);
             textOutput.setText(result);
+            byte[] out = result.getBytes(StandardCharsets.UTF_8);
+            updateSecurityReport("TEXT", out);
             long ms = System.currentTimeMillis() - started;
-            addLog("Text encrypted: " + ms + " ms, output chars=" + result.length());
-            status.setText("Text zašifrován za " + ms + " ms.");
+            addLog("Text encrypted: " + ms + " ms, output=" + out.length + " B");
+            status.setText("Text zašifrován. MAC vytvořen.");
         } catch (Throwable e) {
             addLog("Text encrypt error: " + e.getMessage());
             status.setText("Chyba šifrování: " + e.getMessage());
@@ -449,14 +663,16 @@ public class MainActivity extends Activity {
         if (!keyReady("Text decrypt")) return;
         try {
             long started = System.currentTimeMillis();
+            String[] ds = derivedSeeds("TEXT");
             String result = QesNative.decryptText(
-                    textInput.getText().toString(), pass, s1, s2, s3, s4,
+                    textInput.getText().toString(), pass, ds[0], ds[1], ds[2], ds[3],
                     glyph, particleValue, vector, phase, amplitude
             );
+            if (result.startsWith("QES_ERROR")) throw new IllegalStateException(result);
             textOutput.setText(result);
             long ms = System.currentTimeMillis() - started;
             addLog("Text decrypted: " + ms + " ms");
-            status.setText("Text dešifrován za " + ms + " ms.");
+            status.setText("Text dešifrován.");
         } catch (Throwable e) {
             addLog("Text decrypt error: " + e.getMessage());
             status.setText("Chyba dešifrování: " + e.getMessage());
@@ -473,9 +689,12 @@ public class MainActivity extends Activity {
         try {
             long started = System.currentTimeMillis();
             byte[] data = readAll(secretUri);
-            byte[] out = QesNative.encryptBytes(data, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            String[] ds = derivedSeeds("FILE");
+            byte[] out = QesNative.encryptBytes(data, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(out);
+            updateSecurityReport("FILE", out);
             long ms = System.currentTimeMillis() - started;
-            addLog("File encrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms + ", sha256=" + sha256(out));
+            addLog("File encrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms);
             saveBytes(out, "encrypted.qes", "application/octet-stream");
         } catch (Throwable e) {
             addLog("File encrypt error: " + e.getMessage());
@@ -493,9 +712,12 @@ public class MainActivity extends Activity {
         try {
             long started = System.currentTimeMillis();
             byte[] data = readAll(qesUri);
-            byte[] out = QesNative.decryptBytes(data, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            String[] ds = derivedSeeds("FILE");
+            byte[] out = QesNative.decryptBytes(data, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(out);
+            updateSecurityReport("FILE-DECRYPTED", out);
             long ms = System.currentTimeMillis() - started;
-            addLog("File decrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms + ", sha256=" + sha256(out));
+            addLog("File decrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms);
             saveBytes(out, "decrypted_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("File decrypt error: " + e.getMessage());
@@ -514,10 +736,15 @@ public class MainActivity extends Activity {
             long started = System.currentTimeMillis();
             byte[] secret = readAll(secretUri);
             byte[] cover = readAll(coverUri);
-            byte[] qes = QesNative.encryptBytes(secret, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
-            byte[] finalCover = concat(cover, COVER_BEGIN, qes, COVER_END);
+            String[] ds = derivedSeeds("COVER");
+            byte[] qes = QesNative.encryptBytes(secret, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(qes);
+            byte[] capsule = makeCapsule128("COVER", qes);
+            byte[] finalCover = concat(cover, COVER_BEGIN, capsule, qes, COVER_END);
+            updateSecurityReport("COVER", finalCover);
+            lastCapsule128 = capsule;
             long ms = System.currentTimeMillis() - started;
-            addLog("Cover created: cover=" + cover.length + " B, secret=" + secret.length + " B, final=" + finalCover.length + " B, ms=" + ms + ", sha256=" + sha256(finalCover));
+            addLog("Cover created: cover=" + cover.length + " B, secret=" + secret.length + " B, final=" + finalCover.length + " B, ms=" + ms);
             saveBytes(finalCover, "qes_cover_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("Cover create error: " + e.getMessage());
@@ -538,10 +765,17 @@ public class MainActivity extends Activity {
             int a = indexOf(finalCover, COVER_BEGIN, 0);
             int b = indexOf(finalCover, COVER_END, a < 0 ? 0 : a + COVER_BEGIN.length);
             if (a < 0 || b < 0 || b <= a) throw new IllegalStateException("QES payload v cover souboru nebyl nalezen.");
-            byte[] qes = Arrays.copyOfRange(finalCover, a + COVER_BEGIN.length, b);
-            byte[] out = QesNative.decryptBytes(qes, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            byte[] block = Arrays.copyOfRange(finalCover, a + COVER_BEGIN.length, b);
+            if (block.length <= 128) throw new IllegalStateException("Cover payload je příliš krátký.");
+            byte[] capsule = Arrays.copyOfRange(block, 0, 128);
+            byte[] qes = Arrays.copyOfRange(block, 128, block.length);
+            String[] ds = derivedSeeds("COVER");
+            byte[] out = QesNative.decryptBytes(qes, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(out);
+            lastCapsule128 = capsule;
+            updateSecurityReport("COVER-DECRYPTED", out);
             long ms = System.currentTimeMillis() - started;
-            addLog("Cover decrypted: final=" + finalCover.length + " B, payload=" + qes.length + " B, output=" + out.length + " B, ms=" + ms + ", sha256=" + sha256(out));
+            addLog("Cover decrypted: final=" + finalCover.length + " B, qes=" + qes.length + " B, output=" + out.length + " B, ms=" + ms);
             saveBytes(out, "cover_decrypted_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("Cover decrypt error: " + e.getMessage());
@@ -549,36 +783,117 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void verifyText() {
+        saveKeyState();
+        try {
+            byte[] data = verifyInput.getText().toString().getBytes(StandardCharsets.UTF_8);
+            verifyBytes("TEXT", data);
+        } catch (Throwable e) {
+            status.setText("Chyba ověření textu: " + e.getMessage());
+        }
+    }
+
+    private void verifySelectedFile(String mode) {
+        saveKeyState();
+        if (verifyUri == null) {
+            status.setText("Nejdřív vyber soubor k ověření.");
+            return;
+        }
+        try {
+            byte[] data = readAll(verifyUri);
+            verifyBytes(mode, data);
+        } catch (Throwable e) {
+            status.setText("Chyba ověření souboru: " + e.getMessage());
+        }
+    }
+
+    private void verifyBytes(String mode, byte[] data) throws Exception {
+        String publicHash = sha256(data);
+        String mac = hmacHex(mode, data);
+        boolean hashOk = verifyExpectedHash.getText().toString().trim().isEmpty() || verifyExpectedHash.getText().toString().trim().equalsIgnoreCase(publicHash);
+        boolean macOk = verifyExpectedMac.getText().toString().trim().isEmpty() || verifyExpectedMac.getText().toString().trim().equalsIgnoreCase(mac);
+        String report =
+                "VERIFY MODE: " + mode +
+                "\nSIZE: " + data.length + " B" +
+                "\nPUBLIC_SHA256: " + publicHash +
+                "\nKEYED_MAC: " + mac +
+                "\nHASH_MATCH: " + (hashOk ? "OK" : "FAIL") +
+                "\nMAC_MATCH: " + (macOk ? "OK" : "FAIL");
+        lastReport = report;
+        lastMode = "VERIFY-" + mode;
+        lastOutputBytes = data;
+        addLog(report.replace("\n", " | "));
+        status.setText(hashOk && macOk ? "Ověření OK." : "Ověření nesouhlasí.");
+        setContentView(app());
+        showVerify();
+        card("Výsledek ověření", report);
+    }
+
+    private void updateSecurityReport(String mode, byte[] output) throws Exception {
+        lastMode = mode;
+        lastOutputBytes = output;
+        String publicHash = sha256(output);
+        String mac = hmacHex(mode, output);
+        lastCapsule128 = makeCapsule128(mode, output);
+        lastReport =
+                "QES SECURITY REPORT" +
+                "\nMODE: " + mode +
+                "\nSIZE: " + output.length + " B" +
+                "\nART_PROFILE: " + artProfile +
+                "\nSEEDS_COUNT: " + (1 + countExtraSeeds()) +
+                "\nPUBLIC_SHA256: " + publicHash +
+                "\nKEYED_MAC: " + mac +
+                "\nCAPSULE_128_SHA256: " + sha256(lastCapsule128);
+        addLog("MAC created: mode=" + mode + ", sha256=" + publicHash + ", mac=" + mac);
+    }
+
     private void runDiagnostics() {
         saveKeyState();
-        if (pass.trim().isEmpty()) {
-            pass = "qes-diagnostic-password";
-            addLog("Password byl prázdný. Diagnostika používá dočasný testovací password.");
-        }
+        if (pass.trim().isEmpty()) pass = "qes-diagnostic-password";
+        if (baseSeed.trim().isEmpty()) baseSeed = "seed-main";
+
         long start = System.currentTimeMillis();
         addLog("=== DIAGNOSTIKA START ===");
         rustSelfTest();
 
         try {
             String plain = "QES diagnostic test 123.";
-            String enc = QesNative.encryptText(plain, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
-            String dec = QesNative.decryptText(enc, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            String[] ds = derivedSeeds("TEXT");
+            String enc = QesNative.encryptText(plain, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
+            if (enc.startsWith("QES_ERROR")) throw new IllegalStateException(enc);
+            String dec = QesNative.decryptText(enc, pass, ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
             addLog("Text roundtrip: " + (plain.equals(dec) ? "OK" : "FAIL"));
 
-            String bad = QesNative.decryptText(enc, pass + "_bad", s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            String bad = QesNative.decryptText(enc, pass + "_bad", ds[0], ds[1], ds[2], ds[3], glyph, particleValue, vector, phase, amplitude);
             addLog("Wrong key rejection: " + (!plain.equals(bad) ? "OK" : "FAIL"));
 
-            byte[] bin = new byte[]{0,1,2,3,4,5,6,7,8,9,10,11};
-            byte[] qes = QesNative.encryptBytes(bin, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
-            byte[] out = QesNative.decryptBytes(qes, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            byte[] bin = randomBytes(2048);
+            String[] fs = derivedSeeds("FILE");
+            byte[] qes = QesNative.encryptBytes(bin, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(qes);
+            byte[] out = QesNative.decryptBytes(qes, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(out);
             addLog("Binary roundtrip: " + (Arrays.equals(bin, out) ? "OK" : "FAIL") + ", qes=" + qes.length + " B");
 
-            byte[] cover = "cover-data".getBytes();
-            byte[] finalCover = concat(cover, COVER_BEGIN, qes, COVER_END);
+            byte[] tampered = qes.clone();
+            if (tampered.length > 10) tampered[10] ^= 1;
+            byte[] tamperedOut = QesNative.decryptBytes(tampered, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+            addLog("Tamper rejection: " + (isNativeError(tamperedOut) ? "OK" : "CHECK"));
+
+            byte[] qes2 = QesNative.encryptBytes(bin, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+            addLog("Nonce/output divergence: " + (!Arrays.equals(qes, qes2) ? "OK" : "FAIL"));
+
+            addStatTests(qes);
+
+            byte[] cover = "cover-data".getBytes(StandardCharsets.UTF_8);
+            byte[] capsule = makeCapsule128("COVER", qes);
+            byte[] finalCover = concat(cover, COVER_BEGIN, capsule, qes, COVER_END);
             int a = indexOf(finalCover, COVER_BEGIN, 0);
             int b = indexOf(finalCover, COVER_END, a + COVER_BEGIN.length);
-            byte[] extracted = Arrays.copyOfRange(finalCover, a + COVER_BEGIN.length, b);
-            byte[] restored = QesNative.decryptBytes(extracted, pass, s1, s2, s3, s4, glyph, particleValue, vector, phase, amplitude);
+            byte[] block = Arrays.copyOfRange(finalCover, a + COVER_BEGIN.length, b);
+            byte[] extracted = Arrays.copyOfRange(block, 128, block.length);
+            byte[] restored = QesNative.decryptBytes(extracted, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+            throwIfNativeError(restored);
             addLog("Cover carrier roundtrip: " + (Arrays.equals(bin, restored) ? "OK" : "FAIL"));
 
             addLog("Diagnostic total: " + (System.currentTimeMillis() - start) + " ms");
@@ -590,6 +905,53 @@ public class MainActivity extends Activity {
         }
 
         if (logBox != null) logBox.setText(log.toString());
+    }
+
+    private void runHeavyDiagnostics() {
+        saveKeyState();
+        if (pass.trim().isEmpty()) pass = "qes-heavy-test-password";
+        if (baseSeed.trim().isEmpty()) baseSeed = "seed-main";
+
+        addLog("=== HEAVY TEST START ===");
+        int[] sizes = new int[]{1, 2, 5, 16, 64, 257, 1024, 4096, 16384};
+        int ok = 0;
+        int fail = 0;
+
+        for (int size : sizes) {
+            try {
+                byte[] input = randomBytes(size);
+                String[] fs = derivedSeeds("HEAVY-" + size);
+                byte[] enc = QesNative.encryptBytes(input, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+                throwIfNativeError(enc);
+                byte[] dec = QesNative.decryptBytes(enc, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+                throwIfNativeError(dec);
+                boolean round = Arrays.equals(input, dec);
+                if (round) ok++; else fail++;
+                addLog("Heavy roundtrip " + size + " B: " + (round ? "OK" : "FAIL"));
+                addStatTests(enc);
+            } catch (Throwable e) {
+                fail++;
+                addLog("Heavy test " + size + " B: FAIL - " + e.getMessage());
+            }
+        }
+
+        addLog("HEAVY RESULT: OK=" + ok + " FAIL=" + fail);
+        addLog("=== HEAVY TEST END ===");
+        status.setText("Těžké testy dokončeny: OK=" + ok + " FAIL=" + fail);
+        if (logBox != null) logBox.setText(log.toString());
+    }
+
+    private void addStatTests(byte[] data) {
+        try {
+            double entropy = entropy(data);
+            double monobit = monobitRatio(data);
+            int diversity = byteDiversity(data);
+            double chi = chiSquare(data);
+            double corr = serialCorrelation(data);
+            addLog(String.format(Locale.ROOT, "Stats: entropy=%.4f, monobit=%.4f, diversity=%d/256, chi=%.2f, serialCorr=%.5f", entropy, monobit, diversity, chi, corr));
+        } catch (Throwable e) {
+            addLog("Stats error: " + e.getMessage());
+        }
     }
 
     private void rustSelfTest() {
@@ -608,16 +970,35 @@ public class MainActivity extends Activity {
     }
 
     private void saveLog() {
-        saveBytes(log.toString().getBytes(), "qes_diagnostic_log.txt", "text/plain");
+        saveBytes(log.toString().getBytes(StandardCharsets.UTF_8), "qes_diagnostic_log.txt", "text/plain");
+    }
+
+    private void saveReport() {
+        if (lastReport == null || lastReport.isEmpty()) {
+            status.setText("Zatím není vytvořený MAC report.");
+            return;
+        }
+        saveBytes(lastReport.getBytes(StandardCharsets.UTF_8), "qes_mac_report.txt", "text/plain");
+    }
+
+    private void saveCapsule() {
+        if (lastCapsule128 == null) {
+            status.setText("Zatím není vytvořená kapsle.");
+            return;
+        }
+        saveBytes(lastCapsule128, "qes_capsule_128.bin", "application/octet-stream");
     }
 
     private void saveTextOutput() {
         if (textOutput == null) return;
-        saveBytes(textOutput.getText().toString().getBytes(), "qes_text_output.txt", "text/plain");
+        saveBytes(textOutput.getText().toString().getBytes(StandardCharsets.UTF_8), "qes_text_output.txt", "text/plain");
     }
 
     private void copyOutput() {
-        status.setText("Kopírování do schránky doplníme v dalším patchi. Teď použij ULOŽIT VÝSTUP.");
+        if (textOutput == null) return;
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("QES output", textOutput.getText().toString()));
+        status.setText("Výstup zkopírován.");
     }
 
     private void openFile(int request) {
@@ -666,6 +1047,11 @@ public class MainActivity extends Activity {
                 addLog("Vybrán finální cover soubor: " + uri);
                 status.setText("Finální cover vybrán.");
                 rebuildVisible();
+            } else if (request == REQ_VERIFY_FILE) {
+                verifyUri = uri;
+                addLog("Vybrán soubor pro ověření: " + uri);
+                status.setText("Soubor pro ověření vybrán.");
+                rebuildVisible();
             } else if (request == REQ_SAVE_FILE) {
                 try (OutputStream os = getContentResolver().openOutputStream(uri)) {
                     if (os == null) throw new IllegalStateException("Nelze otevřít výstupní stream.");
@@ -691,11 +1077,91 @@ public class MainActivity extends Activity {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
-            while ((n = is.read(buf)) >= 0) {
-                bos.write(buf, 0, n);
-            }
+            while ((n = is.read(buf)) >= 0) bos.write(buf, 0, n);
             return bos.toByteArray();
         }
+    }
+
+    private void throwIfNativeError(byte[] data) {
+        if (isNativeError(data)) {
+            throw new IllegalStateException(new String(data, 0, Math.min(data.length, 256), StandardCharsets.UTF_8));
+        }
+    }
+
+    private boolean isNativeError(byte[] data) {
+        if (data == null || data.length < 9) return false;
+        String p = new String(data, 0, Math.min(data.length, 32), StandardCharsets.UTF_8);
+        return p.startsWith("QES_ERROR");
+    }
+
+    private byte[] makeCapsule128(String mode, byte[] payload) throws Exception {
+        byte[] capsule = new byte[128];
+        byte[] magic = "QES128V1".getBytes(StandardCharsets.UTF_8);
+        System.arraycopy(magic, 0, capsule, 0, magic.length);
+
+        byte[] modeHash = shaBytes(mode.getBytes(StandardCharsets.UTF_8));
+        byte[] pub = shaBytes(payload);
+        byte[] mac = hmacBytes(mode, payload);
+        byte[] len = ByteBuffer.allocate(8).putLong(payload.length).array();
+
+        System.arraycopy(modeHash, 0, capsule, 8, 24);
+        System.arraycopy(pub, 0, capsule, 32, 32);
+        System.arraycopy(mac, 0, capsule, 64, 32);
+        System.arraycopy(len, 0, capsule, 96, 8);
+
+        byte[] mix = shaBytes(concat(modeHash, pub, mac, len, artProfile.getBytes(StandardCharsets.UTF_8)));
+        System.arraycopy(mix, 0, capsule, 104, 24);
+        return capsule;
+    }
+
+    private String hmacHex(String mode, byte[] data) throws Exception {
+        return hex(hmacBytes(mode, data));
+    }
+
+    private byte[] hmacBytes(String mode, byte[] data) throws Exception {
+        String[] ds = derivedSeeds(mode);
+        String keyMaterial = "QES-MAC|" + mode + "|" + pass + "|" + ds[0] + "|" + ds[1] + "|" + ds[2] + "|" + ds[3] + "|" + glyph + "|" + particleValue + "|" + vector + "|" + phase + "|" + amplitude + "|" + artProfile;
+        byte[] key = shaBytes(keyMaterial.getBytes(StandardCharsets.UTF_8));
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        mac.update(mode.getBytes(StandardCharsets.UTF_8));
+        mac.update((byte) 0);
+        mac.update(data);
+        return mac.doFinal();
+    }
+
+    private byte[] shaBytes(byte[] data) throws Exception {
+        MessageDigest d = MessageDigest.getInstance("SHA-256");
+        return d.digest(data);
+    }
+
+    private String sha256(byte[] data) throws Exception {
+        return hex(shaBytes(data));
+    }
+
+    private String sha256Quiet(byte[] data) {
+        try {
+            return sha256(data);
+        } catch (Throwable e) {
+            return "0000000000000000000000000000000000000000000000000000000000000000";
+        }
+    }
+
+    private String hex(byte[] h) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : h) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
+    private String shortHex(byte[] h) {
+        String x = hex(h);
+        return x.substring(0, Math.min(12, x.length()));
+    }
+
+    private byte[] randomBytes(int n) {
+        byte[] b = new byte[n];
+        random.nextBytes(b);
+        return b;
     }
 
     private byte[] concat(byte[]... arrays) {
@@ -725,12 +1191,62 @@ public class MainActivity extends Activity {
         return -1;
     }
 
-    private String sha256(byte[] data) throws Exception {
-        MessageDigest d = MessageDigest.getInstance("SHA-256");
-        byte[] h = d.digest(data);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : h) sb.append(String.format("%02x", b));
-        return sb.toString();
+    private double entropy(byte[] data) {
+        if (data.length == 0) return 0;
+        int[] c = new int[256];
+        for (byte b : data) c[b & 255]++;
+        double e = 0;
+        for (int x : c) {
+            if (x == 0) continue;
+            double p = (double) x / data.length;
+            e -= p * (Math.log(p) / Math.log(2));
+        }
+        return e;
+    }
+
+    private double monobitRatio(byte[] data) {
+        if (data.length == 0) return 0;
+        long ones = 0;
+        for (byte b : data) ones += Integer.bitCount(b & 255);
+        return (double) ones / (data.length * 8.0);
+    }
+
+    private int byteDiversity(byte[] data) {
+        boolean[] seen = new boolean[256];
+        for (byte b : data) seen[b & 255] = true;
+        int n = 0;
+        for (boolean s : seen) if (s) n++;
+        return n;
+    }
+
+    private double chiSquare(byte[] data) {
+        if (data.length == 0) return 0;
+        int[] c = new int[256];
+        for (byte b : data) c[b & 255]++;
+        double expected = data.length / 256.0;
+        double chi = 0;
+        for (int x : c) {
+            double d = x - expected;
+            chi += (d * d) / expected;
+        }
+        return chi;
+    }
+
+    private double serialCorrelation(byte[] data) {
+        if (data.length < 2) return 0;
+        double mean = 0;
+        for (byte b : data) mean += (b & 255);
+        mean /= data.length;
+
+        double num = 0;
+        double den = 0;
+        for (int i = 0; i < data.length - 1; i++) {
+            double a = (data[i] & 255) - mean;
+            double b = (data[i + 1] & 255) - mean;
+            num += a * b;
+            den += a * a;
+        }
+        return den == 0 ? 0 : num / den;
     }
 
     private void addLog(String s) {
@@ -767,8 +1283,8 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setAllCaps(false);
         b.setText(label);
-        b.setTextSize(12);
-        b.setTextColor(dark ? Color.rgb(5, 6, 10) : Color.WHITE);
+        b.setTextSize(11);
+        b.setTextColor(dark ? Color.rgb(3, 5, 10) : Color.WHITE);
         b.setBackgroundColor(ACCENT);
         b.setOnClickListener(l);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
@@ -794,7 +1310,7 @@ public class MainActivity extends Activity {
         e.setSingleLine(true);
         e.setTextColor(TEXT);
         e.setHintTextColor(MUTED);
-        e.setBackgroundColor(CARD);
+        e.setBackgroundColor(FIELD);
         e.setPadding(16, 12, 16, 12);
         if (secret) e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -810,7 +1326,7 @@ public class MainActivity extends Activity {
         e.setGravity(Gravity.TOP | Gravity.START);
         e.setTextColor(TEXT);
         e.setHintTextColor(MUTED);
-        e.setBackgroundColor(CARD);
+        e.setBackgroundColor(FIELD);
         e.setTypeface(Typeface.MONOSPACE);
         e.setPadding(16, 16, 16, 16);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -851,6 +1367,25 @@ public class MainActivity extends Activity {
         p.setMargins(0, 8, 0, 8);
         v.setLayoutParams(p);
         content.addView(v);
+    }
+
+    private void metrics(String a, String b, String c, String d, String e, String f) {
+        LinearLayout r = row();
+        r.addView(metric(a, b));
+        r.addView(metric(c, d));
+        r.addView(metric(e, f));
+        content.addView(r);
+    }
+
+    private TextView metric(String h, String v) {
+        TextView t = text(h + "\n" + v, 12, TEXT, true);
+        t.setGravity(Gravity.CENTER);
+        t.setBackgroundColor(CARD);
+        t.setPadding(10, 12, 10, 12);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        p.setMargins(4, 8, 4, 8);
+        t.setLayoutParams(p);
+        return t;
     }
 
     private Space space(int h) {
