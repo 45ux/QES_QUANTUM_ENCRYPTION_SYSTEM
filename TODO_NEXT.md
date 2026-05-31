@@ -41,3 +41,13 @@
 - [ ] Komprese před šifrováním.
 - [ ] Adaptive Labyrinth Cover.
 - [ ] Vault / trezor.
+
+
+## ZERO LOCK
+- [x] Přidat ZERO LOCK stav.
+- [x] Přidat Final Seal do reportu.
+- [x] Přidat ZERO LOCK do MAC stránky.
+- [x] Přidat ZERO LOCK do Nastavení.
+- [ ] Napojit ZERO LOCK přímo do formátu .qes.
+- [ ] Napojit ZERO LOCK přímo do cover formátu.
+- [ ] Přidat samostatné ověření ZERO LOCK balíku.

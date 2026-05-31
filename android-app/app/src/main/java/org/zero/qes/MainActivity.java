@@ -98,8 +98,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.5-alpha";
-    private final String patchVersion = "P-2026-05-31-07";
+    private final String appVersion = "0.11.6-alpha";
+    private final String patchVersion = "P-2026-05-31-08";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -138,6 +138,15 @@ public class MainActivity extends Activity {
     private boolean secretDependentLoggingBlocked = true;
     private boolean earlyExitMacBlocked = true;
     private boolean hardenedExecutionMode = true;
+    private boolean zeroLockEnabled = true;
+    private boolean finalSealEnabled = true;
+    private boolean payloadLockEnabled = true;
+    private boolean capsuleBindingEnabled = true;
+    private boolean modeBindingEnabled = true;
+    private boolean versionBindingEnabled = true;
+    private boolean zeroLockTamperDetection = true;
+    private String zeroLockProfile = "STRICT";
+
 
     private boolean deviceGuardEnabled = true;
     private String performanceMode = "BEZPEČNÝ";
@@ -472,7 +481,7 @@ public class MainActivity extends Activity {
         LinearLayout r3 = row();
         r3.addView(navButton("ARCH", "arch"));
         r3.addView(navButton("LOG", "log"));
-        r3.addView(navButton("MAC", "mac"));
+        r3.addView(navButton("ZERO LOCK", "mac"));
         r3.addView(navButton("NASTAVENÍ", "zero"));
 
         box.addView(r1);
@@ -545,6 +554,7 @@ public class MainActivity extends Activity {
         metrics("VERZE", appVersion, "CORE", "RUST JNI", "PATCH", patchVersion);
         card("Funkční vrstvy",
                 "• dynamické seedy: základní seed + libovolné další seedy\n• ASCII art profily jako volitelné dlaždice\n• textové šifrování a dešifrování\n• souborové šifrování a dešifrování\n• cover carrier s payloadem\n• MAC report pro text, soubor i cover\n• ověření podle hash/MAC\n• diagnostika a uložitelný log");
+        card("ZERO LOCK", "ZERO LOCK je aktivní ochranný obal výstupu. Vytváří Final Seal nad payloadem, kapslí, režimem, verzí a metadaty.");
         card("Bezpečnostní rámec",
                 "QES je vývojový prototyp. Diagnostické testy jsou tvrdé indikátory chování, nikoli formální kryptografický audit. Formální bezpečnost by vyžadovala nezávislou kryptografickou analýzu.");
     }
@@ -756,13 +766,43 @@ public class MainActivity extends Activity {
     private void showMac() {
         clear();
         currentPage = "mac";
-        section("MAC / CAPSULE");
-        card("Poslední režim", lastMode);
-        card("Poslední MAC report", lastReport.isEmpty() ? "Zatím nebyl vytvořen." : lastReport);
-        LinearLayout r = row();
-        r.addView(action("ULOŽIT MAC", v -> saveReport()));
-        r.addView(action("ULOŽIT KAPSLI", v -> saveCapsule()));
-        content.addView(r);
+        section("MAC / ZERO LOCK / FINAL SEAL");
+
+        controlTable("ZERO LOCK STATUS", new String[][]{
+                {"ZERO LOCK", yesNo(zeroLockEnabled)},
+                {"Final Seal", yesNo(finalSealEnabled)},
+                {"Payload Lock", yesNo(payloadLockEnabled)},
+                {"Capsule Binding", yesNo(capsuleBindingEnabled)},
+                {"Mode Binding", yesNo(modeBindingEnabled)},
+                {"Version Binding", yesNo(versionBindingEnabled)},
+                {"Tamper Detection", yesNo(zeroLockTamperDetection)},
+                {"Profile", zeroLockProfile}
+        });
+
+        controlTable("POSLEDNÍ VÝSTUP", new String[][]{
+                {"Režim", lastMode},
+                {"Report", lastReport == null || lastReport.isEmpty() ? "NEVYTVOŘEN" : "VYTVOŘEN"},
+                {"Kapsle", lastCapsule128 == null ? "NEVYTVOŘENA" : "VYTVOŘENA"},
+                {"Payload", lastOutputBytes == null ? "NEULOŽEN" : String.valueOf(lastOutputBytes.length) + " B"}
+        });
+
+        card("ZERO LOCK POLICY", zeroLockPolicyText());
+
+        LinearLayout r1 = row();
+        r1.addView(action("ULOŽIT MAC REPORT", v -> saveReport()));
+        r1.addView(action("ULOŽIT KAPSLI", v -> saveCapsule()));
+        content.addView(r1);
+
+        LinearLayout r2 = row();
+        r2.addView(action("ZERO LOCK PROFIL", v -> cycleZeroLockProfile()));
+        r2.addView(action("POLICY", v -> showInfoDialog("QES ZERO LOCK", zeroLockPolicyText())));
+        content.addView(r2);
+
+        if (lastReport != null && !lastReport.isEmpty()) {
+            card("POSLEDNÍ SECURITY REPORT", lastReport);
+        } else {
+            card("POSLEDNÍ SECURITY REPORT", "Zatím nebyl vytvořen. Zašifruj text, soubor nebo cover.");
+        }
     }
 
     private void showZero() {
@@ -1068,6 +1108,8 @@ public class MainActivity extends Activity {
                 {"ART navigace", yesNo(artAsNavigation)},
                 {"MAC / TAG", yesNo(requireMac)},
                 {"Kapsle", yesNo(outputCapsule)},
+                {"ZERO LOCK", yesNo(zeroLockEnabled)},
+                {"Final Seal", yesNo(finalSealEnabled)},
                 {"Kryptografický profil", cryptoProfile}
         });
 
@@ -1362,19 +1404,35 @@ public class MainActivity extends Activity {
     private void updateSecurityReport(String mode, byte[] output) throws Exception {
         lastMode = mode;
         lastOutputBytes = output;
+
         String publicHash = sha256(output);
         String mac = hmacHex(mode, output);
         lastCapsule128 = makeCapsule128(mode, output);
+
+        String zeroLockSeal = zeroLockEnabled ? zeroLockMacHex(mode, output) : "ZERO_LOCK_DISABLED";
+
         lastReport =
                 "QES SECURITY REPORT" +
                 "\nMODE: " + mode +
                 "\nSIZE: " + output.length + " B" +
+                "\nAPP_VERSION: " + appVersion +
+                "\nPATCH: " + patchVersion +
                 "\nART_PROFILE: " + artProfile +
+                "\nCRYPTO_PROFILE: " + cryptoProfile +
                 "\nSEEDS_COUNT: " + (1 + countExtraSeeds()) +
                 "\nPUBLIC_SHA256: " + publicHash +
                 "\nKEYED_MAC: " + mac +
-                "\nCAPSULE_128_SHA256: " + sha256(lastCapsule128);
-        addLog("MAC created: mode=" + mode + ", sha256=" + publicHash + ", mac=" + mac);
+                "\nCAPSULE_128_SHA256: " + sha256(lastCapsule128) +
+                "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
+                "\nZERO_LOCK_PROFILE: " + zeroLockProfile +
+                "\nFINAL_SEAL: " + zeroLockSeal +
+                "\nPAYLOAD_LOCK: " + yesNo(payloadLockEnabled) +
+                "\nCAPSULE_BINDING: " + yesNo(capsuleBindingEnabled) +
+                "\nMODE_BINDING: " + yesNo(modeBindingEnabled) +
+                "\nVERSION_BINDING: " + yesNo(versionBindingEnabled) +
+                "\nTAMPER_DETECTION: " + yesNo(zeroLockTamperDetection);
+
+        addLog("Security report created: mode=" + mode + ", sha256=" + publicHash + ", zeroLock=" + yesNo(zeroLockEnabled));
     }
 
     private void runDiagnostics() {
@@ -1658,6 +1716,52 @@ public class MainActivity extends Activity {
         byte[] mix = shaBytes(concat(modeHash, pub, mac, len, artProfile.getBytes(StandardCharsets.UTF_8)));
         System.arraycopy(mix, 0, capsule, 104, 24);
         return capsule;
+    }
+
+    private String zeroLockMacHex(String mode, byte[] payload) throws Exception {
+        byte[] capsule = lastCapsule128 == null ? makeCapsule128(mode, payload) : lastCapsule128;
+
+        String policy =
+                "ZERO_LOCK|" +
+                "profile=" + zeroLockProfile +
+                "|mode=" + mode +
+                "|app=" + appVersion +
+                "|patch=" + patchVersion +
+                "|art=" + artProfile +
+                "|crypto=" + cryptoProfile +
+                "|len=" + payload.length +
+                "|finalSeal=" + finalSealEnabled +
+                "|payloadLock=" + payloadLockEnabled +
+                "|capsuleBinding=" + capsuleBindingEnabled +
+                "|modeBinding=" + modeBindingEnabled +
+                "|versionBinding=" + versionBindingEnabled;
+
+        byte[] policyBytes = policy.getBytes(StandardCharsets.UTF_8);
+        return hex(hmacBytes("ZERO_LOCK_FINAL_SEAL|" + mode, concat(payload, capsule, policyBytes)));
+    }
+
+    private String zeroLockStateText() {
+        return "ZERO LOCK: " + yesNo(zeroLockEnabled) +
+                "\nFinal Seal: " + yesNo(finalSealEnabled) +
+                "\nPayload Lock: " + yesNo(payloadLockEnabled) +
+                "\nCapsule Binding: " + yesNo(capsuleBindingEnabled) +
+                "\nMode Binding: " + yesNo(modeBindingEnabled) +
+                "\nVersion Binding: " + yesNo(versionBindingEnabled) +
+                "\nTamper Detection: " + yesNo(zeroLockTamperDetection) +
+                "\nProfile: " + zeroLockProfile;
+    }
+
+    private String zeroLockPolicyText() {
+        return "QES ZERO LOCK je ochranný obal výstupu." +
+                "\n\nChrání vazbu mezi payloadem, kapslí, režimem, verzí, ART profilem, kryptografickým profilem a finální pečetí." +
+                "\n\nZERO LOCK není magická neproniknutelná zeď. Je to kryptografická hranice integrity: pokud se změní payload, kapsle, režim nebo metadata, final seal nesouhlasí.";
+    }
+
+    private void cycleZeroLockProfile() {
+        if ("STRICT".equals(zeroLockProfile)) zeroLockProfile = "BALANCED";
+        else if ("BALANCED".equals(zeroLockProfile)) zeroLockProfile = "EXPERIMENTAL";
+        else zeroLockProfile = "STRICT";
+        refreshSettings("zeroLockProfile=" + zeroLockProfile);
     }
 
     private String hmacHex(String mode, byte[] data) throws Exception {

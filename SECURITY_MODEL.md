@@ -65,3 +65,23 @@ cover soubor se analyzuje jako prostor bodů. Klíč určí start, seed určí t
 ## Bezpečnostní upozornění
 Testy nejsou formální kryptografický důkaz.
 Pro ostré nasazení je nutná nezávislá kryptografická analýza.
+
+
+## QES ZERO LOCK
+
+QES ZERO LOCK je ochranný obal výstupu.
+
+ZERO LOCK váže dohromady:
+- encrypted payload
+- QES-128 kapsli
+- režim TEXT / FILE / COVER / VAULT
+- verzi aplikace
+- patch verzi
+- ART profil
+- kryptografický profil
+- délku payloadu
+- public hash
+- keyed MAC
+- final seal
+
+ZERO LOCK není absolutní neproniknutelná zeď. Je to kryptografická hranice integrity. Pokud se změní payload, kapsle, režim nebo metadata, final seal nesouhlasí.
