@@ -94,8 +94,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.0-alpha";
-    private final String patchVersion = "P-2026-05-31-02";
+    private final String appVersion = "0.11.1-alpha";
+    private final String patchVersion = "P-2026-05-31-03";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -579,7 +579,7 @@ public class MainActivity extends Activity {
                 "ART jako navigace: " + on(artAsNavigation) +
                 "\nUložit ART profil do kapsle: " + on(artSaveToCapsule) +
                 "\nAktuální profil: " + artProfile +
-                "\n\nART už nemá být stránka pro heslo. Heslo patří do KLÍČE. ART je profil / dlaždice / navigační doplněk.");
+                "\n\nHeslo patří do KLÍČE. ART je profil / dlaždice / navigační doplněk.");
 
         LinearLayout artRow = row();
         artRow.addView(action("ART NAV", v -> { artAsNavigation = !artAsNavigation; refreshSettings("artAsNavigation=" + artAsNavigation); }));
@@ -622,8 +622,8 @@ public class MainActivity extends Activity {
 
     private String rustStatusQuiet() {
         try {
-            String s = QesNative.selfTest();
-            return s == null || s.isEmpty() ? "OK" : "OK";
+            String result = QesNative.selfTest();
+            return result == null || result.isEmpty() ? "OK" : "OK";
         } catch (Throwable e) {
             return "FAILED";
         }
@@ -715,7 +715,7 @@ public class MainActivity extends Activity {
     }
 
     private void addCompactKeyPanel() {
-        addKeyPanel(true);
+        navigationStatusCard();
     }
 
     private void addSeed() {
@@ -738,6 +738,28 @@ public class MainActivity extends Activity {
     private int countExtraSeeds() {
         if (extraSeeds.trim().isEmpty()) return 0;
         return extraSeeds.trim().split("\\R+").length;
+    }
+
+    private void navigationStatusCard() {
+        String passwordState = (pass == null || pass.trim().isEmpty()) ? "CHYBÍ" : "NASTAVENO";
+        String seedState = (baseSeed == null || baseSeed.trim().isEmpty()) ? "CHYBÍ" : String.valueOf(1 + countExtraSeeds());
+        String macState = requireMac ? "ON" : "OFF";
+        String capsuleState = outputCapsule ? "ON" : "OFF";
+
+        card("NAVIGACE AKTIVNÍ",
+                "Password: " + passwordState +
+                "\nSeedů: " + seedState +
+                "\nART profil: " + artProfile +
+                "\nART jako navigace: " + on(artAsNavigation) +
+                "\nMAC/TAG: " + macState +
+                "\nKapsle: " + capsuleState +
+                "\nCrypto profil: " + cryptoProfile);
+
+        content.addView(action("ZMĚNIT V KLÍČI", v -> {
+            currentPage = "key";
+            setContentView(app());
+            showKey();
+        }));
     }
 
     private void saveKeyState() {
