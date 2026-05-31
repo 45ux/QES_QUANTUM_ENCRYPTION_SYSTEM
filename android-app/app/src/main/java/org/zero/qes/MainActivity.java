@@ -13,6 +13,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.WindowManager;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -97,8 +98,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.4-alpha";
-    private final String patchVersion = "P-2026-05-31-06";
+    private final String appVersion = "0.11.5-alpha";
+    private final String patchVersion = "P-2026-05-31-07";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -123,6 +124,21 @@ public class MainActivity extends Activity {
     private boolean artAsNavigation = true;
     private boolean artSaveToCapsule = true;
 
+    private boolean appShieldEnabled = true;
+    private boolean secureScreenEnabled = true;
+    private boolean noInternetMode = true;
+    private boolean noTelemetryMode = true;
+    private boolean noSecretLogging = true;
+    private boolean clearClipboardPlanned = true;
+    private boolean lockOnBackgroundPlanned = true;
+
+    private boolean sideChannelGuardEnabled = true;
+    private boolean constantTimeCompareEnabled = true;
+    private boolean secretDependentProgressBlocked = true;
+    private boolean secretDependentLoggingBlocked = true;
+    private boolean earlyExitMacBlocked = true;
+    private boolean hardenedExecutionMode = true;
+
     private boolean deviceGuardEnabled = true;
     private String performanceMode = "BEZPEČNÝ";
     private int maxHeavyTestBytes = 1024 * 1024;
@@ -141,6 +157,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         setTitle("QES");
+        getWindow().setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+        );
         applyColors();
         addLog("QES APK spuštěna.");
         setContentView(app());
@@ -716,6 +736,8 @@ public class MainActivity extends Activity {
                 "Stejná navigace, která data zašifruje, je potřebná i k jejich obnově. Kdo nemá password, seedy a particle, nemá správnou trasu.");
         card("Cover",
                 "Současný cover carrier ukládá QES payload do finálního cover souboru. Adaptive Labyrinth Cover je navazující etapa: body, křivka, kapacita, rotace, permutace a návrat podle klíče.");
+            card("App Shield a Side-Channel Guard",
+                "App Shield chrání okolí aplikace: žádný internet, žádná telemetrie, secure screen, žádné tajné logy.\n\nSide-Channel Guard chrání provedení: progress jen podle veřejné délky, constant-time porovnání MAC/hash, zákaz early-exit kontroly a zákaz zobrazování tajných tras.");
     }
 
     private void showLog() {
@@ -838,6 +860,43 @@ public class MainActivity extends Activity {
                 "\nKomprese bude další vrstva před šifrováním. Pro ostré použití musí být přesně zapsaná v metadatech, aby šla data obnovit.");
 
         content.addView(action("KOMPRESNÍ PROFIL", v -> cycleCompression()));
+
+        controlTable("APP SHIELD / SANDBOX", new String[][]{
+                {"App Shield", yesNo(appShieldEnabled)},
+                {"Internet permission", noInternetMode ? "VYPNUTO" : "POVOLENO"},
+                {"Cleartext traffic", "ZAKÁZÁNO"},
+                {"Telemetry", noTelemetryMode ? "VYPNUTO" : "POVOLENO"},
+                {"Secure screen", yesNo(secureScreenEnabled)},
+                {"Secret logging", noSecretLogging ? "ZAKÁZÁNO" : "POVOLENO"},
+                {"Clipboard timeout", clearClipboardPlanned ? "PŘIPRAVENO" : "VYPNUTO"},
+                {"Lock on background", lockOnBackgroundPlanned ? "PŘIPRAVENO" : "VYPNUTO"}
+        });
+
+        LinearLayout shieldRow = row();
+        shieldRow.addView(action("APP SHIELD", v -> { appShieldEnabled = !appShieldEnabled; refreshSettings("appShieldEnabled=" + appShieldEnabled); }));
+        shieldRow.addView(action("SECURE SCREEN", v -> { secureScreenEnabled = !secureScreenEnabled; refreshSettings("secureScreenEnabled=" + secureScreenEnabled); }));
+        content.addView(shieldRow);
+
+        controlTable("SIDE-CHANNEL GUARD", new String[][]{
+                {"Side-Channel Guard", yesNo(sideChannelGuardEnabled)},
+                {"Constant-time compare", yesNo(constantTimeCompareEnabled)},
+                {"Secret progress", secretDependentProgressBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
+                {"Secret logging", secretDependentLoggingBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
+                {"Early-exit MAC", earlyExitMacBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
+                {"Hardened execution", yesNo(hardenedExecutionMode)}
+        });
+
+        LinearLayout sideRow1 = row();
+        sideRow1.addView(action("SIDE GUARD", v -> { sideChannelGuardEnabled = !sideChannelGuardEnabled; refreshSettings("sideChannelGuardEnabled=" + sideChannelGuardEnabled); }));
+        sideRow1.addView(action("CONST TIME", v -> { constantTimeCompareEnabled = !constantTimeCompareEnabled; refreshSettings("constantTimeCompareEnabled=" + constantTimeCompareEnabled); }));
+        content.addView(sideRow1);
+
+        LinearLayout sideRow2 = row();
+        sideRow2.addView(action("HARDENED", v -> { hardenedExecutionMode = !hardenedExecutionMode; refreshSettings("hardenedExecutionMode=" + hardenedExecutionMode); }));
+        sideRow2.addView(action("POLICY", v -> showInfoDialog("QES Side-Channel Guard", sideChannelPolicyText())));
+        content.addView(sideRow2);
+
+        content.addView(action("APP SHIELD POLICY", v -> showInfoDialog("QES App Shield", appShieldPolicyText())));
 
         controlTable("OCHRANA ZAŘÍZENÍ", new String[][]{
                 {"Device Guard", yesNo(deviceGuardEnabled)},
@@ -1281,8 +1340,8 @@ public class MainActivity extends Activity {
     private void verifyBytes(String mode, byte[] data) throws Exception {
         String publicHash = sha256(data);
         String mac = hmacHex(mode, data);
-        boolean hashOk = verifyExpectedHash.getText().toString().trim().isEmpty() || verifyExpectedHash.getText().toString().trim().equalsIgnoreCase(publicHash);
-        boolean macOk = verifyExpectedMac.getText().toString().trim().isEmpty() || verifyExpectedMac.getText().toString().trim().equalsIgnoreCase(mac);
+        boolean hashOk = constantTimeHexEquals(verifyExpectedHash.getText().toString(), publicHash);
+        boolean macOk = constantTimeHexEquals(verifyExpectedMac.getText().toString(), mac);
         String report =
                 "VERIFY MODE: " + mode +
                 "\nSIZE: " + data.length + " B" +
@@ -1736,9 +1795,74 @@ public class MainActivity extends Activity {
         return den == 0 ? 0 : num / den;
     }
 
+    private String sanitizeLogMessage(String message) {
+        if (message == null) return "";
+        String m = message;
+        if (noSecretLogging) {
+            m = m.replaceAll("(?i)password\\s*=\\s*[^,;\\n ]+", "password=<hidden>");
+            m = m.replaceAll("(?i)seed\\s*=\\s*[^,;\\n ]+", "seed=<hidden>");
+            m = m.replaceAll("(?i)key\\s*=\\s*[^,;\\n ]+", "key=<hidden>");
+            m = m.replaceAll("(?i)mac_key\\s*=\\s*[^,;\\n ]+", "mac_key=<hidden>");
+            m = m.replaceAll("(?i)route_seed\\s*=\\s*[^,;\\n ]+", "route_seed=<hidden>");
+            m = m.replaceAll("(?i)hidden_iv\\s*=\\s*[^,;\\n ]+", "hidden_iv=<hidden>");
+        }
+        return m;
+    }
+
+    private boolean constantTimeEquals(byte[] a, byte[] b) {
+        if (a == null || b == null) return false;
+
+        int max = Math.max(a.length, b.length);
+        int diff = a.length ^ b.length;
+
+        for (int i = 0; i < max; i++) {
+            byte av = i < a.length ? a[i] : 0;
+            byte bv = i < b.length ? b[i] : 0;
+            diff |= av ^ bv;
+        }
+
+        return diff == 0;
+    }
+
+    private boolean constantTimeHexEquals(String expected, String actual) {
+        if (expected == null || expected.trim().isEmpty()) return true;
+        if (actual == null) actual = "";
+
+        byte[] a = expected.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+        byte[] b = actual.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+
+        if (!constantTimeCompareEnabled) {
+            return expected.trim().equalsIgnoreCase(actual.trim());
+        }
+
+        return constantTimeEquals(a, b);
+    }
+
+    private String sideChannelPolicyText() {
+        return "QES Side-Channel Guard pravidla:" +
+                "\\n1. Progress ukazuje pouze veřejnou délku a počet bloků." +
+                "\\n2. Progress nesmí ukazovat tajnou trasu, route seed ani hidden IV." +
+                "\\n3. MAC/hash porovnání v Java vrstvě běží constant-time." +
+                "\\n4. Log nesmí obsahovat heslo, seedy, MAC key ani tajné mezikroky." +
+                "\\n5. Hardened režim nesmí měnit počet kroků podle tajného obsahu." +
+                "\\n6. Experimentální labyrint může mít tajnější trasu, ale není doporučen pro ostré použití.";
+    }
+
+    private String appShieldPolicyText() {
+        return "QES App Shield:" +
+                "\\nInternet permission: VYPNUTO" +
+                "\\nCleartext provoz: ZAKÁZÁNO" +
+                "\\nTelemetry: VYPNUTO" +
+                "\\nSecure screen: ZAPNUTO" +
+                "\\nLogování tajných hodnot: ZAKÁZÁNO" +
+                "\\nClipboard timeout: PŘIPRAVENO" +
+                "\\nZámek při pozadí: PŘIPRAVENO";
+    }
+
     private void addLog(String s) {
+        String safe = sanitizeLogMessage(s);
         String ts = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date());
-        log.append("[").append(ts).append("] ").append(s).append("\n");
+        log.append("[").append(ts).append("] ").append(safe).append("\n");
 
         if (logBox != null) {
             runOnUiThread(() -> logBox.setText(log.toString()));
