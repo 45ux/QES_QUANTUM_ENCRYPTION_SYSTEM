@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private boolean dark = true;
     private String currentPage = "overview";
 
-    private String pass = "";
+    private String pass = "qes-demo-password";
     private String s1 = "seed-111";
     private String s2 = "seed-222";
     private String s3 = "seed-333";
@@ -416,8 +416,18 @@ public class MainActivity extends Activity {
         amplitude = parseInt(amplitudeField.getText().toString(), 9, 0, 255);
     }
 
+    private boolean keyReady(String context) {
+        if (pass == null || pass.trim().isEmpty()) {
+            addLog(context + ": FAIL - password nesmí být prázdný.");
+            status.setText("Password nesmí být prázdný. Zadej heslo v části KLÍČ.");
+            return false;
+        }
+        return true;
+    }
+
     private void encryptTextAction() {
         saveKeyState();
+        if (!keyReady("Text encrypt")) return;
         try {
             long started = System.currentTimeMillis();
             String result = QesNative.encryptText(
@@ -436,6 +446,7 @@ public class MainActivity extends Activity {
 
     private void decryptTextAction() {
         saveKeyState();
+        if (!keyReady("Text decrypt")) return;
         try {
             long started = System.currentTimeMillis();
             String result = QesNative.decryptText(
@@ -454,6 +465,7 @@ public class MainActivity extends Activity {
 
     private void encryptSelectedFile() {
         saveKeyState();
+        if (!keyReady("File encrypt")) return;
         if (secretUri == null) {
             status.setText("Nejdřív vyber soubor.");
             return;
@@ -473,6 +485,7 @@ public class MainActivity extends Activity {
 
     private void decryptSelectedFile() {
         saveKeyState();
+        if (!keyReady("File decrypt")) return;
         if (qesUri == null) {
             status.setText("Nejdřív vyber .qes soubor.");
             return;
@@ -492,6 +505,7 @@ public class MainActivity extends Activity {
 
     private void createCoverCarrier() {
         saveKeyState();
+        if (!keyReady("Cover create")) return;
         if (secretUri == null || coverUri == null) {
             status.setText("Vyber tajný soubor i cover soubor.");
             return;
@@ -513,6 +527,7 @@ public class MainActivity extends Activity {
 
     private void decryptCoverCarrier() {
         saveKeyState();
+        if (!keyReady("Cover decrypt")) return;
         if (coverFinalUri == null) {
             status.setText("Nejdřív vyber finální cover soubor.");
             return;
@@ -536,6 +551,10 @@ public class MainActivity extends Activity {
 
     private void runDiagnostics() {
         saveKeyState();
+        if (pass.trim().isEmpty()) {
+            pass = "qes-diagnostic-password";
+            addLog("Password byl prázdný. Diagnostika používá dočasný testovací password.");
+        }
         long start = System.currentTimeMillis();
         addLog("=== DIAGNOSTIKA START ===");
         rustSelfTest();
