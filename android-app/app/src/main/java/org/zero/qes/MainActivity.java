@@ -1,6 +1,7 @@
 package org.zero.qes;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.content.Intent;
 import android.content.ClipData;
@@ -19,6 +20,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
+import android.widget.ProgressBar;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -94,8 +96,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.2-alpha";
-    private final String patchVersion = "P-2026-05-31-04";
+    private final String appVersion = "0.11.3-alpha";
+    private final String patchVersion = "P-2026-05-31-05";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -118,6 +120,16 @@ public class MainActivity extends Activity {
 
     private boolean artAsNavigation = true;
     private boolean artSaveToCapsule = true;
+
+    private boolean deviceGuardEnabled = true;
+    private String performanceMode = "BEZPEČNÝ";
+    private int maxHeavyTestBytes = 1024 * 1024;
+    private int maxHeavyTestSeconds = 30;
+    private boolean operationRunning = false;
+    private int progressPercent = 0;
+    private String progressPhase = "Připraveno";
+    private ProgressBar progressBar;
+    private TextView progressLabel;
 
     private final StringBuilder log = new StringBuilder();
 
@@ -189,6 +201,7 @@ public class MainActivity extends Activity {
         root.addView(text("Quantum Encryption System · " + buildStage + " · v" + appVersion + " · ZERO", 13, MUTED, false));
         root.addView(space(12));
         root.addView(nav());
+        root.addView(progressPanel());
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -201,6 +214,185 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
         return scroll;
+    }
+
+    private LinearLayout progressPanel() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(PANEL);
+        box.setPadding(12, 10, 12, 10);
+
+        progressLabel = text((operationRunning ? "⟳ " : "● ") + progressPhase + " · " + progressPercent + "%", 12, operationRunning ? ACCENT : MUTED, true);
+        box.addView(progressLabel);
+
+        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setProgress(progressPercent);
+        progressBar.setIndeterminate(operationRunning && progressPercent <= 0);
+
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.setMargins(0, 6, 0, 6);
+        progressBar.setLayoutParams(p);
+        box.addView(progressBar);
+
+        return box;
+    }
+
+    private void setProgressState(String phase, int percent) {
+        progressPhase = phase;
+        progressPercent = Math.max(0, Math.min(100, percent));
+        runOnUiThread(() -> {
+            if (progressLabel != null) {
+                progressLabel.setText((operationRunning ? "⟳ " : "● ") + progressPhase + " · " + progressPercent + "%");
+                progressLabel.setTextColor(operationRunning ? ACCENT : MUTED);
+            }
+            if (progressBar != null) {
+                progressBar.setIndeterminate(operationRunning && progressPercent <= 0);
+                progressBar.setProgress(progressPercent);
+            }
+            if (status != null) {
+                status.setText(progressPhase + " · " + progressPercent + "%");
+            }
+        });
+    }
+
+    private void finishProgress(String phase) {
+        operationRunning = false;
+        setProgressState(phase, 100);
+    }
+
+    private void runGuardedOperation(String title, Runnable job) {
+        if (operationRunning) {
+            showErrorDialog("Operace už běží", "Počkej, až doběhne aktuální operace. Tím se chrání zařízení proti přetížení.");
+            return;
+        }
+
+        operationRunning = true;
+        setProgressState(title, 1);
+        addLog("START: " + title);
+
+        new Thread(() -> {
+            try {
+                job.run();
+                addLog("HOTOVO: " + title);
+                runOnUiThread(() -> finishProgress(title + " dokončeno"));
+            } catch (Throwable e) {
+                addLog("CHYBA " + title + ": " + e.getMessage());
+                runOnUiThread(() -> {
+                    operationRunning = false;
+                    setProgressState("Chyba", 0);
+                    showErrorDialog("Chyba: " + title, e.getMessage() == null ? "Neznámá chyba." : e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private boolean deviceGuardAllows(String name, int plannedBytes) {
+        if (!deviceGuardEnabled) return true;
+
+        Runtime rt = Runtime.getRuntime();
+        long free = rt.freeMemory();
+        long max = rt.maxMemory();
+
+        if (plannedBytes > maxHeavyTestBytes) {
+            showErrorDialog("Ochrana zařízení", name + " překračuje limit testu.\n\nLimit: " + maxHeavyTestBytes + " B\nPožadavek: " + plannedBytes + " B\n\nZměň režim výkonu v Nastavení.");
+            return false;
+        }
+
+        if (free < 8L * 1024L * 1024L) {
+            showErrorDialog("Nedostatek paměti", "Aplikace má málo volné paměti. Test zastaven, aby nespadl telefon.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void showErrorDialog(String title, String message) {
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle(title == null ? "Chyba" : title)
+                    .setMessage(message == null ? "Neznámá chyba." : message)
+                    .setPositiveButton("OK", null)
+                    .show();
+        } catch (Throwable ignored) {
+            if (status != null) status.setText((title == null ? "Chyba" : title) + ": " + (message == null ? "" : message));
+        }
+    }
+
+    private void showInfoDialog(String title, String message) {
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle(title == null ? "Info" : title)
+                    .setMessage(message == null ? "" : message)
+                    .setPositiveButton("OK", null)
+                    .show();
+        } catch (Throwable ignored) {
+            if (status != null) status.setText((title == null ? "Info" : title) + ": " + (message == null ? "" : message));
+        }
+    }
+
+    private void controlTable(String title, String[][] rows) {
+        TextView h = text(title, 13, ACCENT, true);
+        h.setLetterSpacing(0.08f);
+        h.setPadding(0, 18, 0, 6);
+        content.addView(h);
+
+        LinearLayout table = new LinearLayout(this);
+        table.setOrientation(LinearLayout.VERTICAL);
+        table.setBackgroundColor(Color.rgb(46, 139, 87));
+        table.setPadding(1, 1, 1, 1);
+
+        for (String[] row : rows) {
+            LinearLayout r = new LinearLayout(this);
+            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.setBackgroundColor(Color.rgb(46, 139, 87));
+            r.setPadding(0, 0, 0, 1);
+
+            TextView left = tableCell(row.length > 0 ? row[0] : "", false);
+            TextView right = tableCell(row.length > 1 ? row[1] : "", true);
+
+            r.addView(left);
+            r.addView(right);
+            table.addView(r);
+        }
+
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.setMargins(0, 4, 0, 12);
+        table.setLayoutParams(p);
+        content.addView(table);
+    }
+
+    private TextView tableCell(String value, boolean strong) {
+        TextView t = text(value, 13, strong ? ACCENT : TEXT, strong);
+        t.setBackgroundColor(CARD);
+        t.setPadding(12, 10, 12, 10);
+        t.setGravity(strong ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, strong ? 0.42f : 0.58f);
+        p.setMargins(0, 0, 1, 0);
+        t.setLayoutParams(p);
+        return t;
+    }
+
+    private String yesNo(boolean value) {
+        return value ? "ZAPNUTO" : "VYPNUTO";
+    }
+
+    private void cyclePerformanceMode() {
+        if ("BEZPEČNÝ".equals(performanceMode)) {
+            performanceMode = "VYVÁŽENÝ";
+            maxHeavyTestBytes = 10 * 1024 * 1024;
+            maxHeavyTestSeconds = 60;
+        } else if ("VYVÁŽENÝ".equals(performanceMode)) {
+            performanceMode = "MAXIMÁLNÍ";
+            maxHeavyTestBytes = 50 * 1024 * 1024;
+            maxHeavyTestSeconds = 120;
+        } else {
+            performanceMode = "BEZPEČNÝ";
+            maxHeavyTestBytes = 1024 * 1024;
+            maxHeavyTestSeconds = 30;
+        }
+        refreshSettings("performanceMode=" + performanceMode);
     }
 
     private LinearLayout nav() {
@@ -611,6 +803,19 @@ public class MainActivity extends Activity {
 
         content.addView(action("PŘEPNOUT KOMPRESI", v -> cycleCompression()));
 
+        controlTable("OCHRANA ZAŘÍZENÍ", new String[][]{
+                {"Device Guard", yesNo(deviceGuardEnabled)},
+                {"Režim výkonu", performanceMode},
+                {"Max test", String.valueOf(maxHeavyTestBytes) + " B"},
+                {"Max čas", String.valueOf(maxHeavyTestSeconds) + " s"},
+                {"Operace běží", yesNo(operationRunning)}
+        });
+
+        LinearLayout guardRow = row();
+        guardRow.addView(action("DEVICE GUARD", v -> { deviceGuardEnabled = !deviceGuardEnabled; refreshSettings("deviceGuardEnabled=" + deviceGuardEnabled); }));
+        guardRow.addView(action("VÝKON", v -> cyclePerformanceMode()));
+        content.addView(guardRow);
+
         card("Testy",
                 "Testovací režim: " + testMode +
                 "\nRychlé = funkčnost. Standardní = roundtrip + MAC. Těžké = statistické indikátory. Extrémní = dlouhé testy pro pozdější verzi.");
@@ -751,17 +956,16 @@ public class MainActivity extends Activity {
     private void navigationStatusCard() {
         String passwordState = (pass == null || pass.trim().isEmpty()) ? "CHYBÍ" : "NASTAVENO";
         String seedState = (baseSeed == null || baseSeed.trim().isEmpty()) ? "CHYBÍ" : String.valueOf(1 + countExtraSeeds());
-        String macState = requireMac ? "ON" : "OFF";
-        String capsuleState = outputCapsule ? "ON" : "OFF";
 
-        card("NAVIGACE AKTIVNÍ",
-                "Password: " + passwordState +
-                "\nSeedů: " + seedState +
-                "\nART profil: " + artProfile +
-                "\nART jako navigace: " + on(artAsNavigation) +
-                "\nMAC/TAG: " + macState +
-                "\nKapsle: " + capsuleState +
-                "\nCrypto profil: " + cryptoProfile);
+        controlTable("NAVIGACE AKTIVNÍ", new String[][]{
+                {"Password", passwordState},
+                {"Seedů", seedState},
+                {"ART profil", artProfile},
+                {"ART navigace", yesNo(artAsNavigation)},
+                {"MAC/TAG", yesNo(requireMac)},
+                {"Kapsle", yesNo(outputCapsule)},
+                {"Crypto profil", cryptoProfile}
+        });
 
         content.addView(action("ZMĚNIT V KLÍČI", v -> {
             currentPage = "key";
@@ -876,7 +1080,7 @@ public class MainActivity extends Activity {
             status.setText("Text zašifrován. MAC vytvořen.");
         } catch (Throwable e) {
             addLog("Text encrypt error: " + e.getMessage());
-            status.setText("Chyba šifrování: " + e.getMessage());
+            showErrorDialog("Chyba šifrování", e.getMessage());
         }
     }
 
@@ -897,7 +1101,7 @@ public class MainActivity extends Activity {
             status.setText("Text dešifrován.");
         } catch (Throwable e) {
             addLog("Text decrypt error: " + e.getMessage());
-            status.setText("Chyba dešifrování: " + e.getMessage());
+            showErrorDialog("Chyba dešifrování", e.getMessage());
         }
     }
 
@@ -920,7 +1124,7 @@ public class MainActivity extends Activity {
             saveBytes(out, "encrypted.qes", "application/octet-stream");
         } catch (Throwable e) {
             addLog("File encrypt error: " + e.getMessage());
-            status.setText("Chyba souborového šifrování: " + e.getMessage());
+            showErrorDialog("Chyba souborového šifrování", e.getMessage());
         }
     }
 
@@ -943,7 +1147,7 @@ public class MainActivity extends Activity {
             saveBytes(out, "decrypted_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("File decrypt error: " + e.getMessage());
-            status.setText("Chyba souborového dešifrování: " + e.getMessage());
+            showErrorDialog("Chyba souborového dešifrování", e.getMessage());
         }
     }
 
@@ -970,7 +1174,7 @@ public class MainActivity extends Activity {
             saveBytes(finalCover, "qes_cover_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("Cover create error: " + e.getMessage());
-            status.setText("Chyba cover režimu: " + e.getMessage());
+            showErrorDialog("Chyba cover režimu", e.getMessage());
         }
     }
 
@@ -1001,7 +1205,7 @@ public class MainActivity extends Activity {
             saveBytes(out, "cover_decrypted_output.bin", "application/octet-stream");
         } catch (Throwable e) {
             addLog("Cover decrypt error: " + e.getMessage());
-            status.setText("Chyba dešifrování coveru: " + e.getMessage());
+            showErrorDialog("Chyba dešifrování coveru", e.getMessage());
         }
     }
 
@@ -1134,33 +1338,50 @@ public class MainActivity extends Activity {
         if (pass.trim().isEmpty()) pass = "qes-heavy-test-password";
         if (baseSeed.trim().isEmpty()) baseSeed = "seed-main";
 
-        addLog("=== HEAVY TEST START ===");
-        int[] sizes = new int[]{1, 2, 5, 16, 64, 257, 1024, 4096, 16384};
-        int ok = 0;
-        int fail = 0;
+        int planned = "MAXIMÁLNÍ".equals(performanceMode) ? 50 * 1024 * 1024 : ("VYVÁŽENÝ".equals(performanceMode) ? 10 * 1024 * 1024 : 1024 * 1024);
+        if (!deviceGuardAllows("Těžké testy", planned)) return;
 
-        for (int size : sizes) {
-            try {
-                byte[] input = randomBytes(size);
-                String[] fs = derivedSeeds("HEAVY-" + size);
-                byte[] enc = QesNative.encryptBytes(input, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
-                throwIfNativeError(enc);
-                byte[] dec = QesNative.decryptBytes(enc, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
-                throwIfNativeError(dec);
-                boolean round = Arrays.equals(input, dec);
-                if (round) ok++; else fail++;
-                addLog("Heavy roundtrip " + size + " B: " + (round ? "OK" : "FAIL"));
-                addStatTests(enc);
-            } catch (Throwable e) {
-                fail++;
-                addLog("Heavy test " + size + " B: FAIL - " + e.getMessage());
+        runGuardedOperation("Těžké testy", () -> {
+            addLog("=== HEAVY TEST START ===");
+            int[] sizes;
+            if ("MAXIMÁLNÍ".equals(performanceMode)) {
+                sizes = new int[]{1, 2, 5, 16, 64, 257, 1024, 4096, 16384, 65536, 262144};
+            } else if ("VYVÁŽENÝ".equals(performanceMode)) {
+                sizes = new int[]{1, 2, 5, 16, 64, 257, 1024, 4096, 16384};
+            } else {
+                sizes = new int[]{1, 2, 5, 16, 64, 257, 1024, 4096};
             }
-        }
 
-        addLog("HEAVY RESULT: OK=" + ok + " FAIL=" + fail);
-        addLog("=== HEAVY TEST END ===");
-        status.setText("Těžké testy dokončeny: OK=" + ok + " FAIL=" + fail);
-        if (logBox != null) logBox.setText(log.toString());
+            int ok = 0;
+            int fail = 0;
+
+            for (int i = 0; i < sizes.length; i++) {
+                int size = sizes[i];
+                setProgressState("Těžké testy: " + size + " B", Math.max(1, (i * 100) / sizes.length));
+
+                try {
+                    byte[] input = randomBytes(size);
+                    String[] fs = derivedSeeds("HEAVY-" + size);
+                    byte[] enc = QesNative.encryptBytes(input, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+                    throwIfNativeError(enc);
+                    byte[] dec = QesNative.decryptBytes(enc, pass, fs[0], fs[1], fs[2], fs[3], glyph, particleValue, vector, phase, amplitude);
+                    throwIfNativeError(dec);
+                    boolean round = Arrays.equals(input, dec);
+                    if (round) ok++; else fail++;
+                    addLog("Heavy roundtrip " + size + " B: " + (round ? "OK" : "FAIL"));
+                    addStatTests(enc);
+                } catch (Throwable e) {
+                    fail++;
+                    addLog("Heavy test " + size + " B: FAIL - " + e.getMessage());
+                }
+            }
+
+            addLog("HEAVY RESULT: OK=" + ok + " FAIL=" + fail);
+            addLog("=== HEAVY TEST END ===");
+            int finalOk = ok;
+            int finalFail = fail;
+            runOnUiThread(() -> status.setText("Těžké testy dokončeny: OK=" + finalOk + " FAIL=" + finalFail));
+        });
     }
 
     private void addStatTests(byte[] data) {
@@ -1473,7 +1694,10 @@ public class MainActivity extends Activity {
     private void addLog(String s) {
         String ts = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date());
         log.append("[").append(ts).append("] ").append(s).append("\n");
-        if (logBox != null) logBox.setText(log.toString());
+
+        if (logBox != null) {
+            runOnUiThread(() -> logBox.setText(log.toString()));
+        }
     }
 
     private int parseInt(String s, int def, int min, int max) {
