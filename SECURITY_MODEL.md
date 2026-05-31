@@ -102,3 +102,32 @@ Cíle:
 
 Aktuální alfa stav:
 UI a limity jsou připravené. Další patch má napojit stream engine přímo do Rust core.
+
+
+## QES STREAM FILE ENGINE ALFA
+
+Alfa stream engine zpracovává soubor po blocích.
+
+Formát:
+- STREAM_MAGIC_V1
+- block_size
+- opakované bloky:
+  - plain_len
+  - encrypted_len
+  - encrypted_block
+- footer:
+  - block_count
+  - plain_total
+  - cipher_total
+  - public_sha256
+  - stream_mac
+
+Cíl:
+- nedržet celý soubor v RAM
+- snížit riziko pádu telefonu
+- progress podle veřejných bloků
+- stream MAC přes všechny bloky
+- příprava na budoucí čistý Rust stream core
+
+Poznámka:
+Toto je alfa stream formát. Při dešifrování se výstup zapisuje průběžně a finální MAC se ověří na konci.

@@ -62,3 +62,14 @@
 - [ ] Napojit streamové šifrování do Rust core.
 - [ ] Přidat streamové ukládání bez držení celého výstupu v RAM.
 - [ ] Přidat streamové ověření Zero Lock balíku.
+
+
+## STREAM FILE ENGINE ALFA
+- [x] Přidat stream šifrování souboru po blocích.
+- [x] Přidat stream dešifrování souboru po blocích.
+- [x] Přidat stream MAC.
+- [x] Přidat stream footer.
+- [x] Přidat progress podle bloků.
+- [ ] Přenést stream engine z Java vrstvy do Rust core.
+- [ ] U dešifrování zapisovat nejdřív do dočasného souboru a až po MAC ověření potvrdit výstup.
+- [ ] Přidat Zero Lock ověření přímo nad stream kontejnerem.

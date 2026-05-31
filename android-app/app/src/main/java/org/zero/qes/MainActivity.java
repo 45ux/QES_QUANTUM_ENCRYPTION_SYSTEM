@@ -46,8 +46,12 @@ public class MainActivity extends Activity {
     private static final int REQ_COVER_FINAL = 103;
     private static final int REQ_VERIFY_FILE = 104;
     private static final int REQ_SAVE_FILE = 200;
+    private static final int REQ_SAVE_STREAM_ENCRYPT = 201;
+    private static final int REQ_SAVE_STREAM_DECRYPT = 202;
 
     private static final byte[] COVER_BEGIN = "\n-----BEGIN QES COVER PAYLOAD V1-----\n".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] STREAM_MAGIC_V1 = "QES_STREAM_V1".getBytes(StandardCharsets.UTF_8);
+
     private static final byte[] COVER_END = "\n-----END QES COVER PAYLOAD V1-----\n".getBytes(StandardCharsets.UTF_8);
 
     private final SecureRandom random = new SecureRandom();
@@ -98,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.7-alpha";
-    private final String patchVersion = "P-2026-05-31-09";
+    private final String appVersion = "0.11.8-alpha";
+    private final String patchVersion = "P-2026-05-31-10";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -152,7 +156,7 @@ public class MainActivity extends Activity {
     private boolean streamSecretTimingBlocked = true;
     private int streamBlockSizeBytes = 512 * 1024;
     private String streamBlockProfile = "512 KB";
-    private String streamEngineStatus = "PŘIPRAVENO PRO RUST PATCH";
+    private String streamEngineStatus = "JAVA STREAM ALFA";
 
 
 
@@ -655,6 +659,11 @@ public class MainActivity extends Activity {
         r2.addView(action("ŠIFROVAT SOUBOR", v -> encryptSelectedFile()));
         r2.addView(action("DEŠIFROVAT .QES", v -> decryptSelectedFile()));
         content.addView(r2);
+
+        LinearLayout rStream = row();
+        rStream.addView(action("STREAM ŠIFROVAT", v -> requestStreamEncryptSave()));
+        rStream.addView(action("STREAM DEŠIFROVAT", v -> requestStreamDecryptSave()));
+        content.addView(rStream);
 
         LinearLayout r3 = row();
         r3.addView(action("ULOŽIT MAC", v -> saveReport()));
@@ -1307,6 +1316,338 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void requestStreamEncryptSave() {
+        saveKeyState();
+        if (!keyReady("Stream file encrypt")) return;
+        if (secretUri == null) {
+            showErrorDialog("Chybí soubor", "Nejdřív vyber vstupní soubor.");
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/octet-stream");
+        i.putExtra(Intent.EXTRA_TITLE, "encrypted_stream.qes");
+        startActivityForResult(i, REQ_SAVE_STREAM_ENCRYPT);
+    }
+
+    private void requestStreamDecryptSave() {
+        saveKeyState();
+        if (!keyReady("Stream file decrypt")) return;
+        if (qesUri == null) {
+            showErrorDialog("Chybí .qes", "Nejdřív vyber streamový .qes soubor.");
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/octet-stream");
+        i.putExtra(Intent.EXTRA_TITLE, "decrypted_stream_output.bin");
+        startActivityForResult(i, REQ_SAVE_STREAM_DECRYPT);
+    }
+
+    private void streamEncryptSelectedFile(Uri outputUri) {
+        saveKeyState();
+        if (!deviceGuardAllows("Stream šifrování", streamBlockSizeBytes)) return;
+
+        runGuardedOperation("Stream šifrování souboru", () -> {
+            try (InputStream is = getContentResolver().openInputStream(secretUri);
+                 OutputStream os = getContentResolver().openOutputStream(outputUri)) {
+
+                if (is == null) throw new IllegalStateException("Nelze otevřít vstupní soubor.");
+                if (os == null) throw new IllegalStateException("Nelze otevřít výstupní soubor.");
+
+                MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
+                Mac streamMac = newStreamingMac("FILE-STREAM");
+
+                os.write(STREAM_MAGIC_V1);
+                writeInt(os, streamBlockSizeBytes);
+
+                byte[] buffer = new byte[streamBlockSizeBytes];
+                long blockIndex = 0;
+                long plainTotal = 0;
+                long cipherTotal = 0;
+
+                setProgressState("Stream: čtení bloků", 1);
+
+                int n;
+                while ((n = is.read(buffer)) >= 0) {
+                    if (n == 0) continue;
+
+                    byte[] plainBlock = Arrays.copyOf(buffer, n);
+                    String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+
+                    byte[] encryptedBlock = QesNative.encryptBytes(
+                            plainBlock,
+                            pass,
+                            ds[0],
+                            ds[1],
+                            ds[2],
+                            ds[3],
+                            glyph,
+                            particleValue,
+                            vector,
+                            phase,
+                            amplitude
+                    );
+                    throwIfNativeError(encryptedBlock);
+
+                    writeInt(os, n);
+                    writeInt(os, encryptedBlock.length);
+                    os.write(encryptedBlock);
+
+                    publicDigest.update(encryptedBlock);
+                    streamMac.update(longToBytes(blockIndex));
+                    streamMac.update(intToBytes(n));
+                    streamMac.update(intToBytes(encryptedBlock.length));
+                    streamMac.update(encryptedBlock);
+
+                    blockIndex++;
+                    plainTotal += n;
+                    cipherTotal += encryptedBlock.length;
+
+                    int pct = (int) Math.min(95, 1 + (blockIndex % 95));
+                    setProgressState("Stream encrypt blok " + blockIndex + " · " + plainTotal + " B", pct);
+                }
+
+                writeInt(os, -1);
+                writeLong(os, blockIndex);
+                writeLong(os, plainTotal);
+                writeLong(os, cipherTotal);
+
+                byte[] publicHash = publicDigest.digest();
+                byte[] finalMac = streamMac.doFinal();
+
+                os.write(publicHash);
+                os.write(finalMac);
+                os.flush();
+
+                lastMode = "FILE-STREAM";
+                lastOutputBytes = null;
+                lastCapsule128 = makeCapsule128("FILE-STREAM", concat(publicHash, finalMac));
+                lastReport =
+                        "QES STREAM SECURITY REPORT" +
+                        "\nMODE: FILE-STREAM" +
+                        "\nAPP_VERSION: " + appVersion +
+                        "\nPATCH: " + patchVersion +
+                        "\nSTREAM_BLOCK: " + streamBlockProfile +
+                        "\nBLOCK_COUNT: " + blockIndex +
+                        "\nPLAIN_SIZE: " + plainTotal + " B" +
+                        "\nCIPHER_SIZE: " + cipherTotal + " B" +
+                        "\nPUBLIC_SHA256: " + hex(publicHash) +
+                        "\nSTREAM_MAC: " + hex(finalMac) +
+                        "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
+                        "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac));
+
+                addLog("Stream encrypt done: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
+                runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + blockIndex));
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private void streamDecryptSelectedFile(Uri outputUri) {
+        saveKeyState();
+        if (!deviceGuardAllows("Stream dešifrování", streamBlockSizeBytes)) return;
+
+        runGuardedOperation("Stream dešifrování souboru", () -> {
+            try (InputStream is = getContentResolver().openInputStream(qesUri);
+                 OutputStream os = getContentResolver().openOutputStream(outputUri)) {
+
+                if (is == null) throw new IllegalStateException("Nelze otevřít streamový .qes soubor.");
+                if (os == null) throw new IllegalStateException("Nelze otevřít výstupní soubor.");
+
+                byte[] magic = readFullyExact(is, STREAM_MAGIC_V1.length);
+                if (!constantTimeEquals(magic, STREAM_MAGIC_V1)) {
+                    throw new IllegalStateException("Neplatný QES stream formát.");
+                }
+
+                int storedBlockSize = readInt(is);
+
+                MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
+                Mac streamMac = newStreamingMac("FILE-STREAM");
+
+                long blockIndex = 0;
+                long plainTotal = 0;
+                long cipherTotal = 0;
+
+                setProgressState("Stream: dešifrování bloků", 1);
+
+                while (true) {
+                    int plainLen = readInt(is);
+                    if (plainLen == -1) break;
+
+                    int encLen = readInt(is);
+                    if (plainLen < 0 || encLen <= 0) throw new IllegalStateException("Poškozený stream blok.");
+
+                    byte[] encryptedBlock = readFullyExact(is, encLen);
+
+                    publicDigest.update(encryptedBlock);
+                    streamMac.update(longToBytes(blockIndex));
+                    streamMac.update(intToBytes(plainLen));
+                    streamMac.update(intToBytes(encLen));
+                    streamMac.update(encryptedBlock);
+
+                    String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+                    byte[] plainBlock = QesNative.decryptBytes(
+                            encryptedBlock,
+                            pass,
+                            ds[0],
+                            ds[1],
+                            ds[2],
+                            ds[3],
+                            glyph,
+                            particleValue,
+                            vector,
+                            phase,
+                            amplitude
+                    );
+                    throwIfNativeError(plainBlock);
+
+                    if (plainBlock.length != plainLen) {
+                        throw new IllegalStateException("Délka dešifrovaného bloku nesouhlasí.");
+                    }
+
+                    os.write(plainBlock);
+
+                    blockIndex++;
+                    plainTotal += plainBlock.length;
+                    cipherTotal += encryptedBlock.length;
+
+                    int pct = (int) Math.min(95, 1 + (blockIndex % 95));
+                    setProgressState("Stream decrypt blok " + blockIndex + " · " + plainTotal + " B", pct);
+                }
+
+                long storedBlocks = readLong(is);
+                long storedPlainTotal = readLong(is);
+                long storedCipherTotal = readLong(is);
+
+                byte[] storedHash = readFullyExact(is, 32);
+                byte[] storedMac = readFullyExact(is, 32);
+
+                byte[] publicHash = publicDigest.digest();
+                byte[] finalMac = streamMac.doFinal();
+
+                boolean ok =
+                        storedBlocks == blockIndex &&
+                        storedPlainTotal == plainTotal &&
+                        storedCipherTotal == cipherTotal &&
+                        constantTimeEquals(storedHash, publicHash) &&
+                        constantTimeEquals(storedMac, finalMac);
+
+                if (!ok) {
+                    throw new IllegalStateException("Stream MAC / hash nesouhlasí. Výstupní soubor považuj za neplatný.");
+                }
+
+                os.flush();
+
+                lastMode = "FILE-STREAM-DECRYPTED";
+                lastOutputBytes = null;
+                lastCapsule128 = makeCapsule128("FILE-STREAM-DECRYPTED", concat(publicHash, finalMac));
+                lastReport =
+                        "QES STREAM VERIFY REPORT" +
+                        "\nMODE: FILE-STREAM-DECRYPTED" +
+                        "\nSTORED_BLOCK_SIZE: " + storedBlockSize +
+                        "\nBLOCK_COUNT: " + blockIndex +
+                        "\nPLAIN_SIZE: " + plainTotal + " B" +
+                        "\nCIPHER_SIZE: " + cipherTotal + " B" +
+                        "\nPUBLIC_SHA256: " + hex(publicHash) +
+                        "\nSTREAM_MAC: " + hex(finalMac) +
+                        "\nVERIFY: OK";
+
+                addLog("Stream decrypt verified: blocks=" + blockIndex + ", plain=" + plainTotal + " B");
+                runOnUiThread(() -> status.setText("Stream dešifrování ověřeno. Bloků: " + blockIndex));
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private Mac newStreamingMac(String mode) throws Exception {
+        String[] ds = derivedSeeds(mode);
+        String keyMaterial =
+                "QES-STREAM-MAC|" +
+                mode +
+                "|" + pass +
+                "|" + ds[0] +
+                "|" + ds[1] +
+                "|" + ds[2] +
+                "|" + ds[3] +
+                "|" + glyph +
+                "|" + particleValue +
+                "|" + vector +
+                "|" + phase +
+                "|" + amplitude +
+                "|" + artProfile +
+                "|" + zeroLockProfile;
+
+        byte[] key = shaBytes(keyMaterial.getBytes(StandardCharsets.UTF_8));
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        mac.update(mode.getBytes(StandardCharsets.UTF_8));
+        mac.update((byte) 0);
+        mac.update(STREAM_MAGIC_V1);
+        mac.update(intToBytes(streamBlockSizeBytes));
+        return mac;
+    }
+
+    private void writeInt(OutputStream os, int value) throws Exception {
+        os.write(intToBytes(value));
+    }
+
+    private void writeLong(OutputStream os, long value) throws Exception {
+        os.write(longToBytes(value));
+    }
+
+    private int readInt(InputStream is) throws Exception {
+        byte[] b = readFullyExact(is, 4);
+        return ((b[0] & 255) << 24) |
+               ((b[1] & 255) << 16) |
+               ((b[2] & 255) << 8) |
+               (b[3] & 255);
+    }
+
+    private long readLong(InputStream is) throws Exception {
+        byte[] b = readFullyExact(is, 8);
+        long v = 0;
+        for (int i = 0; i < 8; i++) {
+            v = (v << 8) | (b[i] & 255L);
+        }
+        return v;
+    }
+
+    private byte[] readFullyExact(InputStream is, int len) throws Exception {
+        byte[] out = new byte[len];
+        int p = 0;
+        while (p < len) {
+            int n = is.read(out, p, len - p);
+            if (n < 0) throw new IllegalStateException("Neočekávaný konec streamu.");
+            p += n;
+        }
+        return out;
+    }
+
+    private byte[] intToBytes(int value) {
+        return new byte[]{
+                (byte) (value >>> 24),
+                (byte) (value >>> 16),
+                (byte) (value >>> 8),
+                (byte) value
+        };
+    }
+
+    private byte[] longToBytes(long value) {
+        return new byte[]{
+                (byte) (value >>> 56),
+                (byte) (value >>> 48),
+                (byte) (value >>> 40),
+                (byte) (value >>> 32),
+                (byte) (value >>> 24),
+                (byte) (value >>> 16),
+                (byte) (value >>> 8),
+                (byte) value
+        };
+    }
+
     private void encryptSelectedFile() {
         saveKeyState();
         if (!keyReady("File encrypt")) return;
@@ -1713,6 +2054,10 @@ public class MainActivity extends Activity {
                 addLog("Vybrán soubor pro ověření: " + uri);
                 status.setText("Soubor pro ověření vybrán.");
                 rebuildVisible();
+            } else if (request == REQ_SAVE_STREAM_ENCRYPT) {
+                streamEncryptSelectedFile(uri);
+            } else if (request == REQ_SAVE_STREAM_DECRYPT) {
+                streamDecryptSelectedFile(uri);
             } else if (request == REQ_SAVE_FILE) {
                 try (OutputStream os = getContentResolver().openOutputStream(uri)) {
                     if (os == null) throw new IllegalStateException("Nelze otevřít výstupní stream.");
