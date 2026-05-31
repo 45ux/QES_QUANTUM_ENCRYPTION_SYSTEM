@@ -51,3 +51,14 @@
 - [ ] Napojit ZERO LOCK přímo do formátu .qes.
 - [ ] Napojit ZERO LOCK přímo do cover formátu.
 - [ ] Přidat samostatné ověření ZERO LOCK balíku.
+
+
+## STREAM GUARD
+- [x] Přidat Stream Guard do Nastavení.
+- [x] Přidat velikost bloku 256 KB / 512 KB / 1 MB.
+- [x] Přidat stream status do SOUBOR.
+- [x] Přidat stream status do COVER.
+- [x] Přidat test limity.
+- [ ] Napojit streamové šifrování do Rust core.
+- [ ] Přidat streamové ukládání bez držení celého výstupu v RAM.
+- [ ] Přidat streamové ověření Zero Lock balíku.

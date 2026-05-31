@@ -85,3 +85,20 @@ ZERO LOCK váže dohromady:
 - final seal
 
 ZERO LOCK není absolutní neproniknutelná zeď. Je to kryptografická hranice integrity. Pokud se změní payload, kapsle, režim nebo metadata, final seal nesouhlasí.
+
+
+## QES STREAM GUARD
+
+QES Stream Guard je vrstva pro budoucí blokové zpracování souborů.
+
+Cíle:
+- nečíst celý soubor do RAM
+- zpracovávat po blocích 256 KB / 512 KB / 1 MB
+- průběžně počítat MAC
+- průběžně počítat public hash
+- zobrazovat progress jen podle veřejného počtu bloků
+- neukazovat tajné interní trasy
+- snížit riziko pádu telefonu u velkých souborů
+
+Aktuální alfa stav:
+UI a limity jsou připravené. Další patch má napojit stream engine přímo do Rust core.

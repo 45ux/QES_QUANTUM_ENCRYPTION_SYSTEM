@@ -98,8 +98,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.6-alpha";
-    private final String patchVersion = "P-2026-05-31-08";
+    private final String appVersion = "0.11.7-alpha";
+    private final String patchVersion = "P-2026-05-31-09";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -146,6 +146,14 @@ public class MainActivity extends Activity {
     private boolean versionBindingEnabled = true;
     private boolean zeroLockTamperDetection = true;
     private String zeroLockProfile = "STRICT";
+    private boolean streamGuardEnabled = true;
+    private boolean streamFileModePlanned = true;
+    private boolean streamProgressByPublicBlocks = true;
+    private boolean streamSecretTimingBlocked = true;
+    private int streamBlockSizeBytes = 512 * 1024;
+    private String streamBlockProfile = "512 KB";
+    private String streamEngineStatus = "PŘIPRAVENO PRO RUST PATCH";
+
 
 
     private boolean deviceGuardEnabled = true;
@@ -627,6 +635,14 @@ public class MainActivity extends Activity {
         section("FILE MODE");
         addCompactKeyPanel();
 
+        controlTable("STREAM STATUS", new String[][]{
+                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Velikost bloku", streamBlockProfile},
+                {"Engine", streamEngineStatus},
+                {"RAM režim", performanceMode},
+                {"Progress", streamProgressByPublicBlocks ? "VEŘEJNÉ BLOKY" : "VYPNUTO"}
+        });
+
         card("Souborový tok",
                 "Vstupní soubor → QES Rust core → encrypted .qes → MAC report. Dešifrování vezme .qes a obnoví původní data.");
 
@@ -654,6 +670,14 @@ public class MainActivity extends Activity {
         currentPage = "cover";
         section("COVER MODE");
         addCompactKeyPanel();
+
+        controlTable("COVER STREAM STATUS", new String[][]{
+                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Velikost bloku", streamBlockProfile},
+                {"Cover režim", "PAYLOAD + KAPSLE"},
+                {"ZERO LOCK", yesNo(zeroLockEnabled)},
+                {"Final Seal", yesNo(finalSealEnabled)}
+        });
 
         card("Cover carrier",
                 "Funkční cover režim přidá QES payload za cover soubor a vytvoří finální cover. Z finálního coveru se payload znovu najde a dešifruje. Současně vzniká MAC report a QES-128 kapsle.");
@@ -711,6 +735,14 @@ public class MainActivity extends Activity {
         clear();
         currentPage = "diag";
         section("DIAGNOSTIKA / TESTY");
+
+        controlTable("TEST LIMITS", new String[][]{
+                {"Device Guard", yesNo(deviceGuardEnabled)},
+                {"Performance", performanceMode},
+                {"Max test", String.valueOf(maxHeavyTestBytes) + " B"},
+                {"Stream block", streamBlockProfile},
+                {"Operace běží", yesNo(operationRunning)}
+        });
         LinearLayout r1 = row();
         r1.addView(action("SPUSTIT TESTY", v -> runDiagnostics()));
         r1.addView(action("TĚŽKÉ TESTY", v -> runHeavyDiagnostics()));
@@ -771,6 +803,8 @@ public class MainActivity extends Activity {
         controlTable("ZERO LOCK STATUS", new String[][]{
                 {"ZERO LOCK", yesNo(zeroLockEnabled)},
                 {"Final Seal", yesNo(finalSealEnabled)},
+                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Blok", streamBlockProfile},
                 {"Payload Lock", yesNo(payloadLockEnabled)},
                 {"Capsule Binding", yesNo(capsuleBindingEnabled)},
                 {"Mode Binding", yesNo(modeBindingEnabled)},
@@ -937,6 +971,26 @@ public class MainActivity extends Activity {
         content.addView(sideRow2);
 
         content.addView(action("APP SHIELD POLICY", v -> showInfoDialog("QES App Shield", appShieldPolicyText())));
+
+        controlTable("STREAM GUARD / BLOCK ENGINE", new String[][]{
+                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Souborový stream", streamFileModePlanned ? "PŘIPRAVENO" : "VYPNUTO"},
+                {"Velikost bloku", streamBlockProfile},
+                {"Block bytes", String.valueOf(streamBlockSizeBytes)},
+                {"Progress podle bloků", yesNo(streamProgressByPublicBlocks)},
+                {"Secret timing", streamSecretTimingBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
+                {"Engine", streamEngineStatus}
+        });
+
+        LinearLayout streamRow1 = row();
+        streamRow1.addView(action("STREAM GUARD", v -> { streamGuardEnabled = !streamGuardEnabled; refreshSettings("streamGuardEnabled=" + streamGuardEnabled); }));
+        streamRow1.addView(action("VELIKOST BLOKU", v -> cycleStreamBlockSize()));
+        content.addView(streamRow1);
+
+        LinearLayout streamRow2 = row();
+        streamRow2.addView(action("BLOCK PROGRESS", v -> { streamProgressByPublicBlocks = !streamProgressByPublicBlocks; refreshSettings("streamProgressByPublicBlocks=" + streamProgressByPublicBlocks); }));
+        streamRow2.addView(action("STREAM POLICY", v -> showInfoDialog("QES Stream Guard", streamPolicyText())));
+        content.addView(streamRow2);
 
         controlTable("OCHRANA ZAŘÍZENÍ", new String[][]{
                 {"Device Guard", yesNo(deviceGuardEnabled)},
@@ -1110,6 +1164,8 @@ public class MainActivity extends Activity {
                 {"Kapsle", yesNo(outputCapsule)},
                 {"ZERO LOCK", yesNo(zeroLockEnabled)},
                 {"Final Seal", yesNo(finalSealEnabled)},
+                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Blok", streamBlockProfile},
                 {"Kryptografický profil", cryptoProfile}
         });
 
@@ -1716,6 +1772,39 @@ public class MainActivity extends Activity {
         byte[] mix = shaBytes(concat(modeHash, pub, mac, len, artProfile.getBytes(StandardCharsets.UTF_8)));
         System.arraycopy(mix, 0, capsule, 104, 24);
         return capsule;
+    }
+
+    private void cycleStreamBlockSize() {
+        if ("256 KB".equals(streamBlockProfile)) {
+            streamBlockProfile = "512 KB";
+            streamBlockSizeBytes = 512 * 1024;
+        } else if ("512 KB".equals(streamBlockProfile)) {
+            streamBlockProfile = "1 MB";
+            streamBlockSizeBytes = 1024 * 1024;
+        } else {
+            streamBlockProfile = "256 KB";
+            streamBlockSizeBytes = 256 * 1024;
+        }
+        refreshSettings("streamBlockProfile=" + streamBlockProfile);
+    }
+
+    private String streamPolicyText() {
+        return "QES Stream Guard:" +
+                "\n\n1. Velké soubory se mají zpracovávat po blocích." +
+                "\n2. Progress smí ukazovat jen veřejný počet bloků a zpracovanou velikost." +
+                "\n3. Tajné trasy, seed, hidden IV ani interní permutace se nesmí zobrazovat." +
+                "\n4. Cílem je, aby aplikace nedržela celý soubor v RAM." +
+                "\n5. Aktuální alfa připravuje UI a limity. Další patch napojí stream engine přímo do Rust core.";
+    }
+
+    private String streamStatusText() {
+        return "Stream Guard: " + yesNo(streamGuardEnabled) +
+                "\nStream file mode: " + (streamFileModePlanned ? "PŘIPRAVENO" : "VYPNUTO") +
+                "\nBlok: " + streamBlockProfile +
+                "\nBlok bajtů: " + streamBlockSizeBytes +
+                "\nProgress podle bloků: " + yesNo(streamProgressByPublicBlocks) +
+                "\nSecret timing blocked: " + yesNo(streamSecretTimingBlocked) +
+                "\nEngine: " + streamEngineStatus;
     }
 
     private String zeroLockMacHex(String mode, byte[] payload) throws Exception {
