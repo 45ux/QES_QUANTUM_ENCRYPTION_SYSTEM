@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.4-alpha";
-    private final String patchVersion = "P-2026-06-01-16-RUST-STREAM-FILE-SWITCH";
+    private final String appVersion = "0.12.6-alpha";
+    private final String patchVersion = "P-2026-06-01-18-STREAM-NORMAL-QES-BLOCKS";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1327,6 +1327,81 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private String qesDisplayNameForUri(Uri uri) {
+        if (uri == null) return "";
+
+        android.database.Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0) {
+                    String name = cursor.getString(idx);
+                    if (name != null && name.trim().length() > 0) {
+                        return qesCleanFileName(name.trim());
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            try {
+                if (cursor != null) cursor.close();
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return "";
+    }
+
+    private String qesCleanFileName(String name) {
+        if (name == null) return "";
+
+        String clean = name.trim()
+                .replace("/", "_")
+                .replace("\\", "_")
+                .replaceAll("[\\r\\n\\t]", "_");
+
+        while (clean.contains("..")) {
+            clean = clean.replace("..", ".");
+        }
+
+        if (clean.length() > 120) {
+            clean = clean.substring(clean.length() - 120);
+        }
+
+        return clean;
+    }
+
+    private String qesStreamEncryptedOutputName() {
+        String name = qesDisplayNameForUri(secretUri);
+        if (name.length() == 0) name = "encrypted_stream";
+
+        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".qes")) {
+            return name;
+        }
+
+        return name + ".qes";
+    }
+
+    private String qesStreamDecryptedOutputName() {
+        String name = qesDisplayNameForUri(qesUri);
+
+        if (name.length() == 0) {
+            return "decrypted_stream_output.bin";
+        }
+
+        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".qes")) {
+            name = name.substring(0, name.length() - 4);
+        }
+
+        if (name.trim().length() == 0 || "encrypted_stream".equalsIgnoreCase(name.trim())) {
+            return "decrypted_stream_output.bin";
+        }
+
+        return qesCleanFileName(name);
+    }
+
     private void requestStreamEncryptSave() {
         saveKeyState();
         if (!keyReady("Stream file encrypt")) return;
@@ -1337,7 +1412,7 @@ public class MainActivity extends Activity {
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("application/octet-stream");
-        i.putExtra(Intent.EXTRA_TITLE, "encrypted_stream.qes");
+        i.putExtra(Intent.EXTRA_TITLE, qesStreamEncryptedOutputName());
         startActivityForResult(i, REQ_SAVE_STREAM_ENCRYPT);
     }
 
@@ -1351,7 +1426,7 @@ public class MainActivity extends Activity {
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("application/octet-stream");
-        i.putExtra(Intent.EXTRA_TITLE, "decrypted_stream_output.bin");
+        i.putExtra(Intent.EXTRA_TITLE, qesStreamDecryptedOutputName());
         startActivityForResult(i, REQ_SAVE_STREAM_DECRYPT);
     }
 
@@ -1386,7 +1461,7 @@ public class MainActivity extends Activity {
                     byte[] plainBlock = Arrays.copyOf(buffer, n);
                     String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
 
-                    byte[] encryptedBlock = QesNative.encryptStreamBlock(
+                    byte[] encryptedBlock = QesNative.encryptBytes(
                             plainBlock,
                             pass,
                             ds[0],
@@ -1397,9 +1472,7 @@ public class MainActivity extends Activity {
                             particleValue,
                             vector,
                             phase,
-                            amplitude,
-                            "FILE-STREAM",
-                            blockIndex
+                            amplitude
                     );
                     throwIfNativeError(encryptedBlock);
 
@@ -1448,9 +1521,10 @@ public class MainActivity extends Activity {
                         "\nPUBLIC_SHA256: " + hex(publicHash) +
                         "\nSTREAM_MAC: " + hex(finalMac) +
                         "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
-                        "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac));
+                        "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac)) +
+                        "\nSTREAM_ENGINE: NORMAL_QES_BLOCKS_V1";
 
-                addLog("Stream encrypt done [Rust block bridge]: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
+                addLog("Stream encrypt done [Normal QES block stream]: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
                 final long finalBlockIndex = blockIndex;
                 runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + finalBlockIndex));
             } catch (Throwable e) {
@@ -1694,7 +1768,7 @@ public class MainActivity extends Activity {
                         byte[] encryptedBlock = readFullyExact(decryptInput, encLen);
                         String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
 
-                        byte[] plainBlock = QesNative.decryptStreamBlock(
+                        byte[] plainBlock = QesNative.decryptBytes(
                                 encryptedBlock,
                                 pass,
                                 ds[0],
@@ -1705,9 +1779,7 @@ public class MainActivity extends Activity {
                                 particleValue,
                                 vector,
                                 phase,
-                                amplitude,
-                                "FILE-STREAM",
-                                blockIndex
+                                amplitude
                         );
                         throwIfNativeError(plainBlock);
 
@@ -1759,9 +1831,9 @@ public class MainActivity extends Activity {
                         "\nSTREAM_MAC: " + hex(verifiedMac) +
                         "\nVERIFY_FIRST: OK" +
                         "\nWRITE_POLICY: WRITE_AFTER_VERIFY" +
-                        "\nSTREAM_ENGINE: RUST_BLOCK_BRIDGE";
+                        "\nSTREAM_ENGINE: NORMAL_QES_BLOCKS_V1";
 
-                addLog("Stream verify-first decrypt OK [Rust block bridge]: blocks=" + verifiedBlocks + ", plain=" + verifiedPlainTotal + " B");
+                addLog("Stream verify-first decrypt OK [Normal QES block stream]: blocks=" + verifiedBlocks + ", plain=" + verifiedPlainTotal + " B");
                 final long finalBlockIndexDecrypt = verifiedBlocks;
                 runOnUiThread(() -> status.setText("Stream verify-first dešifrování OK. Bloků: " + finalBlockIndexDecrypt));
             } catch (Throwable e) {
