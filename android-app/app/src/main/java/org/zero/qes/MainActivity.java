@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.3-alpha";
-    private final String patchVersion = "P-2026-06-01-15-FIX-MISSING-RAIL-METHODS";
+    private final String appVersion = "0.12.2-alpha";
+    private final String patchVersion = "P-2026-05-31-14-UI-SETTINGS-PANEL";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
