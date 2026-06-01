@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.11.9-alpha";
-    private final String patchVersion = "P-2026-05-31-11-VERIFY-FIRST-PREP";
+    private final String appVersion = "0.12.0-alpha";
+    private final String patchVersion = "P-2026-06-01-12-VERIFY-FIRST-STREAM-DECRYPT";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1450,114 +1450,196 @@ public class MainActivity extends Activity {
         saveKeyState();
         if (!deviceGuardAllows("Stream dešifrování", streamBlockSizeBytes)) return;
 
-        runGuardedOperation("Stream dešifrování souboru", () -> {
-            try (InputStream is = getContentResolver().openInputStream(qesUri);
-                 OutputStream os = getContentResolver().openOutputStream(outputUri)) {
+        runGuardedOperation("Stream verify-first dešifrování souboru", () -> {
+            try {
+                if (qesUri == null) throw new IllegalStateException("Chybí streamový .qes soubor.");
+                if (outputUri == null) throw new IllegalStateException("Chybí výstupní soubor.");
 
-                if (is == null) throw new IllegalStateException("Nelze otevřít streamový .qes soubor.");
-                if (os == null) throw new IllegalStateException("Nelze otevřít výstupní soubor.");
+                byte[] verifiedHash;
+                byte[] verifiedMac;
+                int storedBlockSize;
+                long verifiedBlocks;
+                long verifiedPlainTotal;
+                long verifiedCipherTotal;
 
-                byte[] magic = readFullyExact(is, STREAM_MAGIC_V1.length);
-                if (!constantTimeEquals(magic, STREAM_MAGIC_V1)) {
-                    throw new IllegalStateException("Neplatný QES stream formát.");
-                }
+                // FÁZE 1: pouze ověření. Žádný plaintext se ještě nezapisuje.
+                try (InputStream verifyInput = getContentResolver().openInputStream(qesUri)) {
+                    if (verifyInput == null) throw new IllegalStateException("Nelze otevřít streamový .qes soubor.");
 
-                int storedBlockSize = readInt(is);
-
-                MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
-                Mac streamMac = newStreamingMac("FILE-STREAM");
-
-                long blockIndex = 0;
-                long plainTotal = 0;
-                long cipherTotal = 0;
-
-                setProgressState("Stream: dešifrování bloků", 1);
-
-                while (true) {
-                    int plainLen = readInt(is);
-                    if (plainLen == -1) break;
-
-                    int encLen = readInt(is);
-                    if (plainLen < 0 || encLen <= 0) throw new IllegalStateException("Poškozený stream blok.");
-
-                    byte[] encryptedBlock = readFullyExact(is, encLen);
-
-                    publicDigest.update(encryptedBlock);
-                    streamMac.update(longToBytes(blockIndex));
-                    streamMac.update(intToBytes(plainLen));
-                    streamMac.update(intToBytes(encLen));
-                    streamMac.update(encryptedBlock);
-
-                    String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
-                    byte[] plainBlock = QesNative.decryptBytes(
-                            encryptedBlock,
-                            pass,
-                            ds[0],
-                            ds[1],
-                            ds[2],
-                            ds[3],
-                            glyph,
-                            particleValue,
-                            vector,
-                            phase,
-                            amplitude
-                    );
-                    throwIfNativeError(plainBlock);
-
-                    if (plainBlock.length != plainLen) {
-                        throw new IllegalStateException("Délka dešifrovaného bloku nesouhlasí.");
+                    byte[] magic = readFullyExact(verifyInput, STREAM_MAGIC_V1.length);
+                    if (!constantTimeEquals(magic, STREAM_MAGIC_V1)) {
+                        throw new IllegalStateException("Neplatný QES stream formát.");
                     }
 
-                    os.write(plainBlock);
+                    storedBlockSize = readInt(verifyInput);
+                    if (storedBlockSize <= 0 || storedBlockSize > 8 * 1024 * 1024) {
+                        throw new IllegalStateException("Neplatná velikost stream bloku.");
+                    }
 
-                    blockIndex++;
-                    plainTotal += plainBlock.length;
-                    cipherTotal += encryptedBlock.length;
+                    MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
+                    Mac streamMac = newStreamingMacWithBlockSize("FILE-STREAM", storedBlockSize);
 
-                    int pct = (int) Math.min(95, 1 + (blockIndex % 95));
-                    setProgressState("Stream decrypt blok " + blockIndex + " · " + plainTotal + " B", pct);
+                    long blockIndex = 0;
+                    long plainTotal = 0;
+                    long cipherTotal = 0;
+
+                    setProgressState("Stream verify-first: ověřování", 1);
+
+                    while (true) {
+                        int plainLen = readInt(verifyInput);
+                        if (plainLen == -1) break;
+
+                        int encLen = readInt(verifyInput);
+                        if (plainLen < 0 || encLen <= 0) {
+                            throw new IllegalStateException("Poškozený stream blok.");
+                        }
+
+                        byte[] encryptedBlock = readFullyExact(verifyInput, encLen);
+
+                        publicDigest.update(encryptedBlock);
+                        streamMac.update(longToBytes(blockIndex));
+                        streamMac.update(intToBytes(plainLen));
+                        streamMac.update(intToBytes(encLen));
+                        streamMac.update(encryptedBlock);
+
+                        blockIndex++;
+                        plainTotal += plainLen;
+                        cipherTotal += encLen;
+
+                        int pct = (int) Math.min(45, 1 + (blockIndex % 45));
+                        setProgressState("Stream verify blok " + blockIndex + " · " + cipherTotal + " B", pct);
+                    }
+
+                    long storedBlocks = readLong(verifyInput);
+                    long storedPlainTotal = readLong(verifyInput);
+                    long storedCipherTotal = readLong(verifyInput);
+
+                    byte[] storedHash = readFullyExact(verifyInput, 32);
+                    byte[] storedMac = readFullyExact(verifyInput, 32);
+
+                    byte[] publicHash = publicDigest.digest();
+                    byte[] finalMac = streamMac.doFinal();
+
+                    boolean ok =
+                            storedBlocks == blockIndex &&
+                            storedPlainTotal == plainTotal &&
+                            storedCipherTotal == cipherTotal &&
+                            constantTimeEquals(storedHash, publicHash) &&
+                            constantTimeEquals(storedMac, finalMac);
+
+                    if (!ok) {
+                        throw new IllegalStateException("Stream MAC / hash nesouhlasí. Dešifrování bylo zastaveno před zápisem výstupu.");
+                    }
+
+                    verifiedHash = publicHash;
+                    verifiedMac = finalMac;
+                    verifiedBlocks = blockIndex;
+                    verifiedPlainTotal = plainTotal;
+                    verifiedCipherTotal = cipherTotal;
                 }
 
-                long storedBlocks = readLong(is);
-                long storedPlainTotal = readLong(is);
-                long storedCipherTotal = readLong(is);
+                // FÁZE 2: až po ověření se otevře výstup a zapisuje plaintext.
+                try (InputStream decryptInput = getContentResolver().openInputStream(qesUri);
+                     OutputStream os = getContentResolver().openOutputStream(outputUri)) {
 
-                byte[] storedHash = readFullyExact(is, 32);
-                byte[] storedMac = readFullyExact(is, 32);
+                    if (decryptInput == null) throw new IllegalStateException("Nelze znovu otevřít streamový .qes soubor.");
+                    if (os == null) throw new IllegalStateException("Nelze otevřít výstupní soubor.");
 
-                byte[] publicHash = publicDigest.digest();
-                byte[] finalMac = streamMac.doFinal();
+                    byte[] magic = readFullyExact(decryptInput, STREAM_MAGIC_V1.length);
+                    if (!constantTimeEquals(magic, STREAM_MAGIC_V1)) {
+                        throw new IllegalStateException("Neplatný QES stream formát při dešifrování.");
+                    }
 
-                boolean ok =
-                        storedBlocks == blockIndex &&
-                        storedPlainTotal == plainTotal &&
-                        storedCipherTotal == cipherTotal &&
-                        constantTimeEquals(storedHash, publicHash) &&
-                        constantTimeEquals(storedMac, finalMac);
+                    int blockSizeSecondPass = readInt(decryptInput);
+                    if (blockSizeSecondPass != storedBlockSize) {
+                        throw new IllegalStateException("Stream hlavička se mezi ověřením a dešifrováním změnila.");
+                    }
 
-                if (!ok) {
-                    throw new IllegalStateException("Stream MAC / hash nesouhlasí. Výstupní soubor považuj za neplatný.");
+                    long blockIndex = 0;
+                    long plainTotal = 0;
+                    long cipherTotal = 0;
+
+                    setProgressState("Stream verify-first: dešifrování", 50);
+
+                    while (true) {
+                        int plainLen = readInt(decryptInput);
+                        if (plainLen == -1) break;
+
+                        int encLen = readInt(decryptInput);
+                        if (plainLen < 0 || encLen <= 0) {
+                            throw new IllegalStateException("Poškozený stream blok při dešifrování.");
+                        }
+
+                        byte[] encryptedBlock = readFullyExact(decryptInput, encLen);
+                        String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+
+                        byte[] plainBlock = QesNative.decryptBytes(
+                                encryptedBlock,
+                                pass,
+                                ds[0],
+                                ds[1],
+                                ds[2],
+                                ds[3],
+                                glyph,
+                                particleValue,
+                                vector,
+                                phase,
+                                amplitude
+                        );
+                        throwIfNativeError(plainBlock);
+
+                        if (plainBlock.length != plainLen) {
+                            throw new IllegalStateException("Délka dešifrovaného bloku nesouhlasí.");
+                        }
+
+                        os.write(plainBlock);
+
+                        blockIndex++;
+                        plainTotal += plainBlock.length;
+                        cipherTotal += encryptedBlock.length;
+
+                        int pct = (int) Math.min(98, 50 + (blockIndex % 48));
+                        setProgressState("Stream decrypt blok " + blockIndex + " · " + plainTotal + " B", pct);
+                    }
+
+                    long storedBlocks = readLong(decryptInput);
+                    long storedPlainTotal = readLong(decryptInput);
+                    long storedCipherTotal = readLong(decryptInput);
+                    readFullyExact(decryptInput, 32);
+                    readFullyExact(decryptInput, 32);
+
+                    if (storedBlocks != verifiedBlocks ||
+                        storedPlainTotal != verifiedPlainTotal ||
+                        storedCipherTotal != verifiedCipherTotal ||
+                        blockIndex != verifiedBlocks ||
+                        plainTotal != verifiedPlainTotal ||
+                        cipherTotal != verifiedCipherTotal) {
+                        throw new IllegalStateException("Stream metadata nesouhlasí po druhém průchodu.");
+                    }
+
+                    os.flush();
                 }
-
-                os.flush();
 
                 lastMode = "FILE-STREAM-DECRYPTED";
                 lastOutputBytes = null;
-                lastCapsule128 = makeCapsule128("FILE-STREAM-DECRYPTED", concat(publicHash, finalMac));
+                lastCapsule128 = makeCapsule128("FILE-STREAM-DECRYPTED", concat(verifiedHash, verifiedMac));
                 lastReport =
-                        "QES STREAM VERIFY REPORT" +
+                        "QES STREAM VERIFY-FIRST REPORT" +
                         "\nMODE: FILE-STREAM-DECRYPTED" +
+                        "\nAPP_VERSION: " + appVersion +
+                        "\nPATCH: " + patchVersion +
                         "\nSTORED_BLOCK_SIZE: " + storedBlockSize +
-                        "\nBLOCK_COUNT: " + blockIndex +
-                        "\nPLAIN_SIZE: " + plainTotal + " B" +
-                        "\nCIPHER_SIZE: " + cipherTotal + " B" +
-                        "\nPUBLIC_SHA256: " + hex(publicHash) +
-                        "\nSTREAM_MAC: " + hex(finalMac) +
-                        "\nVERIFY: OK";
+                        "\nBLOCK_COUNT: " + verifiedBlocks +
+                        "\nPLAIN_SIZE: " + verifiedPlainTotal + " B" +
+                        "\nCIPHER_SIZE: " + verifiedCipherTotal + " B" +
+                        "\nPUBLIC_SHA256: " + hex(verifiedHash) +
+                        "\nSTREAM_MAC: " + hex(verifiedMac) +
+                        "\nVERIFY_FIRST: OK" +
+                        "\nWRITE_POLICY: WRITE_AFTER_VERIFY";
 
-                addLog("Stream decrypt verified: blocks=" + blockIndex + ", plain=" + plainTotal + " B");
-                final long finalBlockIndexDecrypt = blockIndex;
-                runOnUiThread(() -> status.setText("Stream dešifrování ověřeno. Bloků: " + finalBlockIndexDecrypt));
+                addLog("Stream verify-first decrypt OK: blocks=" + verifiedBlocks + ", plain=" + verifiedPlainTotal + " B");
+                final long finalBlockIndexDecrypt = verifiedBlocks;
+                runOnUiThread(() -> status.setText("Stream verify-first dešifrování OK. Bloků: " + finalBlockIndexDecrypt));
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
@@ -1565,6 +1647,10 @@ public class MainActivity extends Activity {
     }
 
     private Mac newStreamingMac(String mode) throws Exception {
+        return newStreamingMacWithBlockSize(mode, streamBlockSizeBytes);
+    }
+
+    private Mac newStreamingMacWithBlockSize(String mode, int blockSizeForMac) throws Exception {
         String[] ds = derivedSeeds(mode);
         String keyMaterial =
                 "QES-STREAM-MAC|" +
@@ -1588,11 +1674,12 @@ public class MainActivity extends Activity {
         mac.update(mode.getBytes(StandardCharsets.UTF_8));
         mac.update((byte) 0);
         mac.update(STREAM_MAGIC_V1);
-        mac.update(intToBytes(streamBlockSizeBytes));
+        mac.update(intToBytes(blockSizeForMac));
         return mac;
     }
 
     private void writeInt(OutputStream os, int value) throws Exception {
+
         os.write(intToBytes(value));
     }
 
