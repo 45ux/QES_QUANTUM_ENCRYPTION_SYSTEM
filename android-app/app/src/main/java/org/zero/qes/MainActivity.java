@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.0-alpha";
-    private final String patchVersion = "P-2026-06-01-12-VERIFY-FIRST-STREAM-DECRYPT";
+    private final String appVersion = "0.12.1-alpha";
+    private final String patchVersion = "P-2026-06-01-13-STREAM-VERIFY-ONLY";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -664,6 +664,11 @@ public class MainActivity extends Activity {
         rStream.addView(action("STREAM ŠIFROVAT", v -> requestStreamEncryptSave()));
         rStream.addView(action("STREAM DEŠIFROVAT", v -> requestStreamDecryptSave()));
         content.addView(rStream);
+
+        LinearLayout rStreamVerify = row();
+        rStreamVerify.addView(action("STREAM OVĚŘIT .QES", v -> verifySelectedStreamQesOnly()));
+        rStreamVerify.addView(action("STREAM POLICY", v -> showInfoDialog("QES Stream Guard", streamPolicyText())));
+        content.addView(rStreamVerify);
 
         LinearLayout r3 = row();
         r3.addView(action("ULOŽIT MAC", v -> saveReport()));
@@ -1440,6 +1445,113 @@ public class MainActivity extends Activity {
                 addLog("Stream encrypt done: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
                 final long finalBlockIndex = blockIndex;
                 runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + finalBlockIndex));
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+
+    private void verifySelectedStreamQesOnly() {
+        saveKeyState();
+
+        if (!keyReady("Stream verify only")) return;
+
+        if (qesUri == null) {
+            showErrorDialog("Chybí .qes", "Nejdřív vyber streamový .qes soubor.");
+            return;
+        }
+
+        runGuardedOperation("Stream ověření .qes", () -> {
+            try (InputStream is = getContentResolver().openInputStream(qesUri)) {
+                if (is == null) throw new IllegalStateException("Nelze otevřít streamový .qes soubor.");
+
+                byte[] magic = readFullyExact(is, STREAM_MAGIC_V1.length);
+                if (!constantTimeEquals(magic, STREAM_MAGIC_V1)) {
+                    throw new IllegalStateException("Neplatný QES stream formát.");
+                }
+
+                int storedBlockSize = readInt(is);
+                if (storedBlockSize <= 0 || storedBlockSize > 8 * 1024 * 1024) {
+                    throw new IllegalStateException("Neplatná velikost stream bloku.");
+                }
+
+                MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
+                Mac streamMac = newStreamingMacWithBlockSize("FILE-STREAM", storedBlockSize);
+
+                long blockIndex = 0;
+                long plainTotal = 0;
+                long cipherTotal = 0;
+
+                setProgressState("Stream verify only: čtení bloků", 1);
+
+                while (true) {
+                    int plainLen = readInt(is);
+                    if (plainLen == -1) break;
+
+                    int encLen = readInt(is);
+                    if (plainLen < 0 || encLen <= 0) {
+                        throw new IllegalStateException("Poškozený stream blok.");
+                    }
+
+                    byte[] encryptedBlock = readFullyExact(is, encLen);
+
+                    publicDigest.update(encryptedBlock);
+                    streamMac.update(longToBytes(blockIndex));
+                    streamMac.update(intToBytes(plainLen));
+                    streamMac.update(intToBytes(encLen));
+                    streamMac.update(encryptedBlock);
+
+                    blockIndex++;
+                    plainTotal += plainLen;
+                    cipherTotal += encLen;
+
+                    int pct = (int) Math.min(95, 1 + (blockIndex % 95));
+                    setProgressState("Stream verify only blok " + blockIndex + " · " + cipherTotal + " B", pct);
+                }
+
+                long storedBlocks = readLong(is);
+                long storedPlainTotal = readLong(is);
+                long storedCipherTotal = readLong(is);
+
+                byte[] storedHash = readFullyExact(is, 32);
+                byte[] storedMac = readFullyExact(is, 32);
+
+                byte[] publicHash = publicDigest.digest();
+                byte[] finalMac = streamMac.doFinal();
+
+                boolean ok =
+                        storedBlocks == blockIndex &&
+                        storedPlainTotal == plainTotal &&
+                        storedCipherTotal == cipherTotal &&
+                        constantTimeEquals(storedHash, publicHash) &&
+                        constantTimeEquals(storedMac, finalMac);
+
+                if (!ok) {
+                    throw new IllegalStateException("Stream ověření selhalo: hash/MAC nebo metadata nesouhlasí.");
+                }
+
+                lastMode = "FILE-STREAM-VERIFY-ONLY";
+                lastOutputBytes = null;
+                lastCapsule128 = makeCapsule128("FILE-STREAM-VERIFY-ONLY", concat(publicHash, finalMac));
+                lastReport =
+                        "QES STREAM VERIFY-ONLY REPORT" +
+                        "\nMODE: FILE-STREAM-VERIFY-ONLY" +
+                        "\nAPP_VERSION: " + appVersion +
+                        "\nPATCH: " + patchVersion +
+                        "\nSTORED_BLOCK_SIZE: " + storedBlockSize +
+                        "\nBLOCK_COUNT: " + blockIndex +
+                        "\nPLAIN_SIZE: " + plainTotal + " B" +
+                        "\nCIPHER_SIZE: " + cipherTotal + " B" +
+                        "\nPUBLIC_SHA256: " + hex(publicHash) +
+                        "\nSTREAM_MAC: " + hex(finalMac) +
+                        "\nVERIFY_ONLY: OK" +
+                        "\nWRITE_POLICY: NO_OUTPUT_WRITTEN";
+
+                addLog("Stream verify-only OK: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
+
+                final long finalBlocks = blockIndex;
+                runOnUiThread(() -> status.setText("Stream .qes ověřen bez zápisu výstupu. Bloků: " + finalBlocks));
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
