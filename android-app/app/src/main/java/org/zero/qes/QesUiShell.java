@@ -125,11 +125,58 @@ public final class QesUiShell {
                     a.getSharedPreferences(PREF, Context.MODE_PRIVATE)
                         .edit().putInt("qes_palette_v4", which).apply();
                     Toast.makeText(a, "Paleta: " + names[which], Toast.LENGTH_SHORT).show();
-                    install(a);
+                    refreshShellPalette(a);
                 }
             })
             .setPositiveButton("ZAVŘÍT", null)
             .show();
+    }
+
+
+    private static void refreshShellPalette(Activity a) {
+        try {
+            FrameLayout content = a.findViewById(android.R.id.content);
+            if (content == null) return;
+
+            Palette p = palette(a);
+            for (int i = 0; i < content.getChildCount(); i++) {
+                View c = content.getChildAt(i);
+                Object tag = c.getTag();
+                if (tag != null && SHELL.equals(String.valueOf(tag))) {
+                    recolorShell(c, p);
+                    applyTheme(c, p);
+                    return;
+                }
+            }
+
+            install(a);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void recolorShell(View v, Palette p) {
+        if (v == null) return;
+
+        Object tag = v.getTag();
+        if (tag != null) {
+            String t = String.valueOf(tag);
+            if (t.equals(SHELL)) v.setBackgroundColor(p.black);
+            if (t.startsWith("QES_RAIL")) v.setBackground(panel(p.black, p.sea));
+        }
+
+        if (v instanceof TextView) {
+            TextView tv = (TextView)v;
+            Object t = tv.getTag();
+            if (t != null && String.valueOf(t).startsWith("QES_RAIL")) {
+                tv.setTextColor(String.valueOf(t).equals("QES_RAIL_LOGO") ? p.cyan : p.lime);
+                tv.setBackground(panel(p.black, p.sea));
+            }
+        }
+
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup)v;
+            for (int i = 0; i < g.getChildCount(); i++) recolorShell(g.getChildAt(i), p);
+        }
     }
 
     private static TextView railButton(final Activity a, String text, final String sec, final View original,
@@ -158,7 +205,8 @@ public final class QesUiShell {
                         showSettings(a);
                         return;
                     }
-                    boolean ok = findAndClick(original, sec);
+                    boolean ok = openPageDirect(a, sec);
+                    if (!ok) ok = findAndClick(original, sec);
                     hideOldMenu(original);
                     applyTheme(original, palette(a));
                     if (!ok) Toast.makeText(a, "Sekce: " + sec, Toast.LENGTH_SHORT).show();
@@ -166,6 +214,54 @@ public final class QesUiShell {
             });
         }
         return v;
+    }
+
+
+    private static boolean openPageDirect(Activity a, String sec) {
+        String page = pageForSection(sec);
+        if (page == null) return false;
+
+        try {
+            callPrivateNoArgs(a, "saveKeyState");
+
+            java.lang.reflect.Field f = a.getClass().getDeclaredField("currentPage");
+            f.setAccessible(true);
+            f.set(a, page);
+
+            callPrivateNoArgs(a, "rebuildCurrentPage");
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void callPrivateNoArgs(Activity a, String name) {
+        try {
+            java.lang.reflect.Method m = a.getClass().getDeclaredMethod(name);
+            m.setAccessible(true);
+            m.invoke(a);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String pageForSection(String sec) {
+        if (sec == null) return null;
+        String n = norm(sec);
+
+        if (n.equals("PREHLED")) return "overview";
+        if (n.equals("KLIC")) return "key";
+        if (n.equals("ART")) return "art";
+        if (n.equals("TEXT")) return "text";
+        if (n.equals("SOUBOR")) return "file";
+        if (n.equals("COVER")) return "cover";
+        if (n.equals("OVERENI")) return "verify";
+        if (n.equals("TESTY")) return "diag";
+        if (n.equals("LOG")) return "log";
+        if (n.equals("ARCH")) return "arch";
+        if (n.equals("ZERO")) return "zero";
+        if (n.contains("MAC") && n.contains("ZERO")) return "mac";
+
+        return null;
     }
 
     private static void activeRail(View v, String sec, Palette p) {
@@ -200,13 +296,32 @@ public final class QesUiShell {
 
     private static void hideOldMenu(View v) {
         if (v == null) return;
+
+        Object tag = v.getTag();
+        if (tag != null && String.valueOf(tag).startsWith("QES_RAIL")) return;
+
         if (v instanceof TextView && v.isClickable()) {
             String n = norm(String.valueOf(((TextView)v).getText()));
-            if (isSection(n)) v.setVisibility(View.GONE);
+            if (isSection(n)) {
+                v.setVisibility(View.GONE);
+                return;
+            }
         }
+
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup)v;
             for (int i = 0; i < g.getChildCount(); i++) hideOldMenu(g.getChildAt(i));
+
+            boolean hasChild = g.getChildCount() > 0;
+            boolean allGone = hasChild;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                if (g.getChildAt(i).getVisibility() != View.GONE) {
+                    allGone = false;
+                    break;
+                }
+            }
+
+            if (allGone) g.setVisibility(View.GONE);
         }
     }
 
