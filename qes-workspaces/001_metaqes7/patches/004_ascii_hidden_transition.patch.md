@@ -1,6 +1,6 @@
 # Patch 004 — ASCII hidden transition v1
 
-Status: PLANNED
+Status: APPLIED BY TERMUX PATCH
 
 Cíl:
 Nově generovaný ASCII nosič nemá viditelně ukazovat řádky `ZERO:` a `SEAL:`. Venku má být vidět jen ASCII art obal, zatímco skrytá hlavička a TAG3 seal zůstanou v souboru zakódované jako art-like řádky.

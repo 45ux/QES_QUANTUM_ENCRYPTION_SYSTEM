@@ -513,8 +513,8 @@ pub fn run_self_tests() -> Vec<SelfTestCase> {
             let looks_like_art = art.contains("BEGIN QCS ASCII ART")
                 && art.contains("END QCS ASCII ART")
                 && art.lines().count() >= 10
-                && art.contains("ZERO:")
-                && art.contains("SEAL:")
+                && !art.contains("ZERO:")
+                && !art.contains("SEAL:")
                 && !art.contains("QCSAA1 len=")
                 && !art.contains("ZEROQCS6|");
             results.push(SelfTestCase {
@@ -938,6 +938,8 @@ mod tests {
         let p = params();
         let data = b"Test pres ASCII art nosic.";
         let art = encrypt_to_ascii_art(data, &p).unwrap();
+        assert!(!art.contains("ZERO:"), "new ASCII-only carrier must not expose ZERO: line");
+        assert!(!art.contains("SEAL:"), "new ASCII-only carrier must not expose SEAL: line");
         let dec = decrypt_from_ascii_art(&art, &p).unwrap();
         assert_eq!(dec, data);
     }
