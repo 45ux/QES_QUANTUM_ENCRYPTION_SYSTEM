@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.4-alpha";
-    private final String patchVersion = "P-2026-06-01-16-RAIL-COMPILE-FIX";
+    private final String appVersion = "0.13.0-alpha";
+    private final String patchVersion = "P-2026-06-01-17-QES-UI-SHELL";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -187,7 +187,7 @@ public class MainActivity extends Activity {
         setContentView(app());
         
         getWindow().getDecorView().postDelayed(new Runnable() {
-            @Override public void run() { qesForceVisibleSideRailV2(); }
+            @Override public void run() { QesUiShell.install(MainActivity.this); }
         }, 800L);
 showOverview();
     }
@@ -3515,7 +3515,7 @@ showOverview();
             v.setOnClickListener(new android.view.View.OnClickListener() {
                 @Override public void onClick(android.view.View x) {
                     if ("NASTAVENÍ".equals(target)) {
-                        qesShowUiSettingsPanelV3();
+                        QesUiShell.showSettings(MainActivity.this);
                     } else {
                         qesFindAndClickV2(getWindow().getDecorView(), target);
                     }
@@ -3613,7 +3613,7 @@ showOverview();
                                     android.widget.Toast.LENGTH_SHORT
                                 ).show();
 
-                                qesForceVisibleSideRailV2();
+                                QesUiShell.install(MainActivity.this);
                             }
                         })
                         .show();
