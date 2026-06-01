@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.1-alpha";
-    private final String patchVersion = "P-2026-05-31-13-FORCE-VISIBLE-RAIL";
+    private final String appVersion = "0.12.3-alpha";
+    private final String patchVersion = "P-2026-06-01-15-FIX-MISSING-RAIL-METHODS";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -3418,5 +3418,294 @@ showOverview();
         }
     }
 
+
+
+    private int qesDpV2(int v) {
+        return Math.max(1, (int)(v * getResources().getDisplayMetrics().density + 0.5f));
+    }
+
+    private android.graphics.drawable.GradientDrawable qesRailBgV2(int fill, int stroke) {
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setColor(fill);
+        d.setStroke(qesDpV2(1), stroke);
+        d.setCornerRadius(qesDpV2(8));
+        return d;
+    }
+
+    private void qesForceVisibleSideRailV2() {
+        try {
+            android.widget.FrameLayout content = findViewById(android.R.id.content);
+            if (content == null) return;
+
+            for (int i = 0; i < content.getChildCount(); i++) {
+                android.view.View old = content.getChildAt(i);
+                Object tag = old.getTag();
+                if (tag != null && "QES_FORCE_RAIL_V2".equals(String.valueOf(tag))) return;
+            }
+
+            if (content.getChildCount() > 0) {
+                android.view.View main = content.getChildAt(0);
+                main.setPadding(
+                    main.getPaddingLeft() + qesDpV2(96),
+                    main.getPaddingTop(),
+                    main.getPaddingRight(),
+                    main.getPaddingBottom()
+                );
+            }
+
+            android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+            scroll.setTag("QES_FORCE_RAIL_V2");
+            scroll.setFillViewport(false);
+            scroll.setBackgroundColor(android.graphics.Color.rgb(2, 12, 15));
+
+            android.widget.LinearLayout rail = new android.widget.LinearLayout(this);
+            rail.setOrientation(android.widget.LinearLayout.VERTICAL);
+            rail.setPadding(qesDpV2(4), qesDpV2(6), qesDpV2(4), qesDpV2(6));
+            rail.setBackground(qesRailBgV2(
+                android.graphics.Color.rgb(3, 22, 26),
+                android.graphics.Color.rgb(46, 139, 118)
+            ));
+
+            String[] items = new String[] {
+                "PŘEHLED", "KLÍČ", "ART", "TEXT", "SOUBOR", "COVER", "OVĚŘENÍ",
+                "TESTY", "LOG", "MAC / ZERO", "ARCH", "ZERO", "NASTAVENÍ"
+            };
+
+            android.widget.TextView title = qesRailButtonV2("QES", null);
+            title.setTextSize(14);
+            rail.addView(title);
+
+            for (final String name : items) {
+                rail.addView(qesRailButtonV2(name, name));
+            }
+
+            scroll.addView(rail);
+
+            android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
+                qesDpV2(94),
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            lp.gravity = android.view.Gravity.START | android.view.Gravity.TOP;
+            content.addView(scroll, lp);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private android.widget.TextView qesRailButtonV2(String text, final String target) {
+        android.widget.TextView v = new android.widget.TextView(this);
+        v.setText(text);
+        v.setTextColor(android.graphics.Color.rgb(170, 255, 248));
+        v.setTextSize(9);
+        v.setGravity(android.view.Gravity.CENTER);
+        v.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        v.setPadding(qesDpV2(2), qesDpV2(6), qesDpV2(2), qesDpV2(6));
+        v.setBackground(qesRailBgV2(
+            android.graphics.Color.rgb(5, 35, 42),
+            android.graphics.Color.rgb(46, 139, 118)
+        ));
+
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        lp.setMargins(0, 0, 0, qesDpV2(5));
+        v.setLayoutParams(lp);
+
+        if (target != null) {
+            v.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override public void onClick(android.view.View x) {
+                    if ("NASTAVENÍ".equals(target)) {
+                        qesShowUiSettingsPanelV3();
+                    } else {
+                        qesFindAndClickV2(getWindow().getDecorView(), target);
+                    }
+                }
+            });
+        }
+
+        return v;
+    }
+
+    private boolean qesFindAndClickV2(android.view.View v, String target) {
+        if (v == null) return false;
+
+        Object tag = v.getTag();
+        if (tag != null && "QES_FORCE_RAIL_V2".equals(String.valueOf(tag))) return false;
+
+        if (v instanceof android.widget.TextView) {
+            String t = String.valueOf(((android.widget.TextView)v).getText());
+            if (qesNormV2(t).contains(qesNormV2(target)) && v.isShown() && v.isEnabled() && v.isClickable()) {
+                v.performClick();
+                return true;
+            }
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup)v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                if (qesFindAndClickV2(g.getChildAt(i), target)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String qesNormV2(String x) {
+        if (x == null) return "";
+        return x.toUpperCase(java.util.Locale.ROOT)
+            .replace("Ř","R").replace("Ě","E").replace("Š","S").replace("Č","C")
+            .replace("Ž","Z").replace("Ý","Y").replace("Á","A").replace("Í","I")
+            .replace("É","E").replace("Ů","U").replace("Ú","U").replace("/", " ")
+            .replaceAll("\\s+", " ").trim();
+    }
+
+
+    private void qesShowUiSettingsPanelV3() {
+        try {
+            final String[] languages = new String[] {
+                "Čeština", "English", "Polski", "Русский", "日本語", "中文", "Español", "Deutsch", "Français"
+            };
+            final String[] codes = new String[] {
+                "cs", "en", "pl", "ru", "ja", "zh", "es", "de", "fr"
+            };
+
+            android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+            box.setOrientation(android.widget.LinearLayout.VERTICAL);
+            box.setPadding(qesDpV2(14), qesDpV2(10), qesDpV2(14), qesDpV2(10));
+            box.setBackground(qesRailBgV2(
+                android.graphics.Color.rgb(3, 22, 26),
+                android.graphics.Color.rgb(46, 139, 118)
+            ));
+
+            android.widget.TextView title = new android.widget.TextView(this);
+            title.setText("QES NASTAVENÍ UI");
+            title.setTextColor(android.graphics.Color.rgb(112, 255, 240));
+            title.setTextSize(18);
+            title.setGravity(android.view.Gravity.CENTER);
+            title.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+            title.setPadding(0, 0, 0, qesDpV2(10));
+            box.addView(title);
+
+            android.widget.TextView info = new android.widget.TextView(this);
+            info.setText("Jazyk, motiv a kontrast. Tajné hodnoty se zde nikdy nelogují.");
+            info.setTextColor(android.graphics.Color.rgb(210, 255, 250));
+            info.setTextSize(13);
+            info.setPadding(0, 0, 0, qesDpV2(10));
+            box.addView(info);
+
+            android.widget.Button lang = qesDialogButtonV3("JAZYK / LANGUAGE");
+            lang.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override public void onClick(android.view.View v) {
+                    new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle("QES jazyk")
+                        .setItems(languages, new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                                getSharedPreferences("qes_settings", MODE_PRIVATE)
+                                    .edit()
+                                    .putString("qes_language", codes[which])
+                                    .putString("qes_lang", codes[which])
+                                    .putString("language", codes[which])
+                                    .apply();
+
+                                android.widget.Toast.makeText(
+                                    MainActivity.this,
+                                    "QES jazyk: " + languages[which],
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show();
+
+                                qesForceVisibleSideRailV2();
+                            }
+                        })
+                        .show();
+                }
+            });
+            box.addView(lang);
+
+            android.widget.Button dark = qesDialogButtonV3("TMAVÝ MOTIV");
+            dark.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override public void onClick(android.view.View v) {
+                    getSharedPreferences("qes_settings", MODE_PRIVATE)
+                        .edit().putString("qes_theme", "dark").apply();
+                    qesApplyVisibleContrastV3(true);
+                    android.widget.Toast.makeText(MainActivity.this, "QES tmavý motiv", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+            box.addView(dark);
+
+            android.widget.Button light = qesDialogButtonV3("SVĚTLÝ MOTIV");
+            light.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override public void onClick(android.view.View v) {
+                    getSharedPreferences("qes_settings", MODE_PRIVATE)
+                        .edit().putString("qes_theme", "light").apply();
+                    qesApplyVisibleContrastV3(false);
+                    android.widget.Toast.makeText(MainActivity.this, "QES světlý motiv", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+            box.addView(light);
+
+            android.widget.Button contrast = qesDialogButtonV3("ZVÝŠIT KONTRAST");
+            contrast.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override public void onClick(android.view.View v) {
+                    qesApplyVisibleContrastV3(true);
+                    android.widget.Toast.makeText(MainActivity.this, "QES kontrast zvýšen", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+            box.addView(contrast);
+
+            new android.app.AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("ZAVŘÍT", null)
+                .show();
+        } catch (Throwable t) {
+            android.widget.Toast.makeText(this, "QES nastavení se nepodařilo otevřít.", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private android.widget.Button qesDialogButtonV3(String text) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(text);
+        b.setTextColor(android.graphics.Color.rgb(170, 255, 248));
+        b.setTextSize(13);
+        b.setAllCaps(false);
+        b.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        b.setBackground(qesRailBgV2(
+            android.graphics.Color.rgb(5, 35, 42),
+            android.graphics.Color.rgb(46, 139, 118)
+        ));
+
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        lp.setMargins(0, 0, 0, qesDpV2(8));
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void qesApplyVisibleContrastV3(boolean dark) {
+        try {
+            android.view.View root = getWindow().getDecorView();
+            int bg = dark ? android.graphics.Color.rgb(2, 12, 15) : android.graphics.Color.rgb(225, 255, 250);
+            int fg = dark ? android.graphics.Color.rgb(210, 255, 250) : android.graphics.Color.rgb(0, 45, 50);
+            root.setBackgroundColor(bg);
+            qesApplyVisibleContrastRecursiveV3(root, fg);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void qesApplyVisibleContrastRecursiveV3(android.view.View v, int fg) {
+        if (v == null) return;
+
+        if (v instanceof android.widget.TextView) {
+            ((android.widget.TextView)v).setTextColor(fg);
+        }
+
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup)v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                qesApplyVisibleContrastRecursiveV3(g.getChildAt(i), fg);
+            }
+        }
+    }
 
 }
