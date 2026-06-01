@@ -21,7 +21,7 @@ codegen-units = 1
 panic = "abort"
 
 [lib]
-name = "qes_core"
+name = "qes_quantum_encryption_system"
 crate-type = ["rlib", "cdylib"]
 
 [target.'cfg(target_os = "android")'.dependencies]

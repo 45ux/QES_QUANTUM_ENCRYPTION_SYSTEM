@@ -1,0 +1,61 @@
+name: QES GitHub-only patcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      patch:
+        description: "Patch to apply"
+        required: true
+        default: "fast-tests"
+        type: choice
+        options:
+          - fast-tests
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  apply-patch:
+    name: Apply QES patch in cloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Show branch
+        run: |
+          echo "Branch: ${{ github.ref_name }}"
+          git log --oneline -5
+
+      - name: Apply selected patch
+        run: |
+          python3 tools/qes_patch_runner.py
+
+      - name: Verify Rust quick tests
+        run: |
+          cd rust-core
+          cargo test --lib cipher::tests::core_roundtrip -- --nocapture
+          cargo test --lib cipher::tests::ascii_roundtrip -- --nocapture
+
+      - name: Show diff
+        run: |
+          git status --short
+          git diff --stat
+
+      - name: Commit patch result
+        run: |
+          git config user.name "QES GitHub Patcher"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Apply QES GitHub-only patch: ${{ inputs.patch }}"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No changes to commit."
+          fi

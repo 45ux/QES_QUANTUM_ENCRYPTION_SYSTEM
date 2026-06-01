@@ -230,22 +230,22 @@ pub fn diagnose_pipeline(data: &[u8], params: &QcsParams, include_frames: bool) 
 
     if include_frames {
         let tag1 = ctx.mac("TAG1_CORE_ENCRYPTED_DATA", &[encrypted_core.as_slice()], TAG_LEN);
-        let tag2_note = "TAG2 je uvnitř skryté ZERO hlavičky a chrání metadata + ASCII nosič.";
+        let tag2_note = "Nový model: TAG1/TAG2 jsou skryté XOF XOR masky; ZERO_UNDER_TAG1 je maskovaná metadata visačka.";
         push_frame(&mut frames, "ENCRYPTED_CORE_1_1", None, &encrypted_core, vec![
             var("core_len", &format!("{} B", encrypted_core.len()), "Tady se ověřuje 1:1 délka vůči vstupu."),
             var("TAG1_CORE", &fingerprint(&tag1), "Otisk skutečné MAC pečetě přes encrypted_core."),
-            var("TAG2_CARRIER", "skrytý v ZERO hlavičce", tag2_note),
+            var("TAG2_CARRIER", "XOF maska + metadata bind", tag2_note),
         ]);
         frames.push(DiagnosticFrame {
             index: frames.len(),
-            stage: "ASCII_ART_NOSIC_TAG3_ZERO_SEAL".to_string(),
+            stage: "ASCII_ART_CARRIER_TAG3_SEAL".to_string(),
             round: None,
             len: ascii_art.len(),
             checksum: blake3_hex(ascii_art.as_bytes()),
             preview_hex: preview_hex(ascii_art.as_bytes(), 64),
             variables: vec![
                 var("ascii_art_chars", &ascii_art.chars().count().to_string(), "Počet znaků textového nosiče. Nosič je delší než binární 1:1 core."),
-                var("ZERO-SEAL", "SEAL řádek na konci", "TAG3 chrání celý ASCII balíček jako finální pečeť."),
+                var("TAG3_ASCII_SEAL", "legacy seal / budoucí hidden art slot", "TAG3 chrání ASCII art; další formátový krok ho schová bez viditelného řádku."),
                 var("particle_hash", &params.particle.short_hash_hex(), "Particle řídí trasu nosiče."),
             ],
             ascii_image: ascii_art.clone(),
@@ -381,8 +381,12 @@ fn build_metadata(plaintext: &[u8], encrypted_core: &[u8]) -> Vec<u8> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+
+    // METAQES7 = nový vnitřní model ZERO_UNDER_TAG1.
+    // ZERO není veřejný řádek s tajemstvím. Je to skrytá metadata visačka
+    // maskovaná přes ctx.mask_metadata() a navázaná na TAG1/TAG2 v core toku.
     format!(
-        "METAQCS6|plain_len={}|plain_hash={}|core_len={}|core_hash={}|counter=0|created_unix={}|carrier=ascii_art|nonce=hidden|tags=3",
+        "METAQES7|zero_model=ZERO_UNDER_TAG1|pre_core_otp=on|tag1_xof_mask=on|tag2_xof_mask=on|tag3_ascii_seal=on|plain_len={}|plain_hash={}|core_len={}|core_hash={}|counter=0|created_unix={}|carrier=ascii_art|nonce=hidden|visible_tags=legacy_compat",
         plaintext.len(),
         blake3_hex(plaintext),
         encrypted_core.len(),
@@ -394,9 +398,28 @@ fn build_metadata(plaintext: &[u8], encrypted_core: &[u8]) -> Vec<u8> {
 fn verify_metadata(metadata_plain: &[u8], plaintext: &[u8], encrypted_core: &[u8]) -> Result<()> {
     let s = String::from_utf8(metadata_plain.to_vec())
         .map_err(|_| anyhow!("Skrytá metadata nejdou přečíst: špatný klíč nebo poškozený soubor"))?;
-    if !s.starts_with("METAQCS6|") {
+    let is_metaqcs6 = s.starts_with("METAQCS6|");
+    let is_metaqes7 = s.starts_with("METAQES7|");
+
+    if !(is_metaqcs6 || is_metaqes7) {
         return Err(anyhow!("Skrytá metadata nemají správnou verzi"));
     }
+
+    if is_metaqes7 {
+        let zero_model = read_meta_value(&s, "zero_model")?;
+        if zero_model != "ZERO_UNDER_TAG1" {
+            return Err(anyhow!("Metadata: ZERO model nesedí"));
+        }
+
+        let pre_core_otp = read_meta_value(&s, "pre_core_otp")?;
+        let tag1_xof_mask = read_meta_value(&s, "tag1_xof_mask")?;
+        let tag2_xof_mask = read_meta_value(&s, "tag2_xof_mask")?;
+
+        if pre_core_otp != "on" || tag1_xof_mask != "on" || tag2_xof_mask != "on" {
+            return Err(anyhow!("Metadata: QES ochranné vrstvy nesedí"));
+        }
+    }
+
     let plain_len = read_meta_usize(&s, "plain_len")?;
     let core_len = read_meta_usize(&s, "core_len")?;
     let plain_hash = read_meta_value(&s, "plain_hash")?;
@@ -442,6 +465,7 @@ pub fn run_self_tests() -> Vec<SelfTestCase> {
     match params.test_route_context() {
         Ok(ctx) => {
             results.push(test_route_seeds(&ctx));
+            results.push(test_subkey_separation(&ctx));
             results.extend(test_permutation_steps(&ctx));
             results.extend(test_diffusion_steps(&ctx));
             results.extend(test_superposition_steps(&ctx));
@@ -494,7 +518,7 @@ pub fn run_self_tests() -> Vec<SelfTestCase> {
                 && !art.contains("QCSAA1 len=")
                 && !art.contains("ZEROQCS6|");
             results.push(SelfTestCase {
-                name: "ASCII art má skrytou ZERO hlavičku a TAG3 ZERO-SEAL".to_string(),
+                name: "ASCII art carrier má legacy metadata seal a QES V3 vrstvy".to_string(),
                 ok: looks_like_art,
                 detail: format!("lines={}", art.lines().count()),
             });
@@ -627,6 +651,52 @@ fn sample_params() -> QcsParams {
         },
     }
 }
+
+
+fn test_subkey_separation(ctx: &RouteContext) -> SelfTestCase {
+    let keys: Vec<(&str, &[u8; 32])> = vec![
+        ("pre_otp_key", &ctx.pre_otp_key),
+        ("enc_key", &ctx.enc_key),
+        ("route_key", &ctx.route_key),
+        ("replicator_key", &ctx.replicator_key),
+        ("zero_key", &ctx.zero_key),
+        ("tag1_mac_key", &ctx.tag1_mac_key),
+        ("tag1_xof_key", &ctx.tag1_xof_key),
+        ("tag2_mac_key", &ctx.tag2_mac_key),
+        ("tag2_xof_key", &ctx.tag2_xof_key),
+        ("tag3_mac_key", &ctx.tag3_mac_key),
+        ("meta_bind_key", &ctx.meta_bind_key),
+    ];
+
+    let mut ok = true;
+    let mut collision = String::new();
+
+    for i in 0..keys.len() {
+        for j in (i + 1)..keys.len() {
+            if keys[i].1 == keys[j].1 {
+                ok = false;
+                collision = format!("{} == {}", keys[i].0, keys[j].0);
+            }
+        }
+    }
+
+    SelfTestCase {
+        name: "QES V3: oddělené subklíče pro PRE/TAG1/TAG2/TAG3/ZERO".to_string(),
+        ok,
+        detail: if ok {
+            format!(
+                "{} subklíčů má odlišné hodnoty; tag1={} tag2={} tag3={}",
+                keys.len(),
+                fingerprint(ctx.tag1_mac_key.as_slice()),
+                fingerprint(ctx.tag2_mac_key.as_slice()),
+                fingerprint(ctx.tag3_mac_key.as_slice())
+            )
+        } else {
+            format!("kolize subklíčů: {}", collision)
+        },
+    }
+}
+
 
 fn test_route_seeds(ctx: &RouteContext) -> SelfTestCase {
     let ok = ctx.hidden_iv != [0u8; 32] && ctx.route_seed != [0u8; 32] && ctx.hidden_iv != ctx.route_seed;
@@ -858,7 +928,7 @@ mod tests {
         assert_eq!(report.input_len, report.encrypted_core_len);
         assert!(report.frame_count >= 123);
         assert!(report.frames.iter().any(|f| f.stage == "PERMUTACE"));
-        assert!(report.frames.iter().any(|f| f.stage == "ASCII_ART_NOSIC_TAG3_ZERO_SEAL"));
+        assert!(report.frames.iter().any(|f| f.stage == "ASCII_ART_CARRIER_TAG3_SEAL"));
     }
 
     #[test]
