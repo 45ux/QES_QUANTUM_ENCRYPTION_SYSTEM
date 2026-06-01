@@ -1393,9 +1393,9 @@ public class MainActivity extends Activity {
                     if (n == 0) continue;
 
                     byte[] plainBlock = Arrays.copyOf(buffer, n);
-                    String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+                    String[] ds = derivedSeeds("FILE-STREAM");
 
-                    byte[] encryptedBlock = QesNative.encryptBytes(
+                    byte[] encryptedBlock = QesNative.encryptStreamBlock(
                             plainBlock,
                             pass,
                             ds[0],
@@ -1406,7 +1406,9 @@ public class MainActivity extends Activity {
                             particleValue,
                             vector,
                             phase,
-                            amplitude
+                            amplitude,
+                            "FILE-STREAM",
+                            blockIndex
                     );
                     throwIfNativeError(encryptedBlock);
 
@@ -1700,9 +1702,9 @@ public class MainActivity extends Activity {
                         }
 
                         byte[] encryptedBlock = readFullyExact(decryptInput, encLen);
-                        String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+                        String[] ds = derivedSeeds("FILE-STREAM");
 
-                        byte[] plainBlock = QesNative.decryptBytes(
+                        byte[] plainBlock = QesNative.decryptStreamBlock(
                                 encryptedBlock,
                                 pass,
                                 ds[0],
@@ -1713,7 +1715,9 @@ public class MainActivity extends Activity {
                                 particleValue,
                                 vector,
                                 phase,
-                                amplitude
+                                amplitude,
+                                "FILE-STREAM",
+                                blockIndex
                         );
                         throwIfNativeError(plainBlock);
 
