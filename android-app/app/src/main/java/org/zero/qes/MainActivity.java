@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.3-alpha";
-    private final String patchVersion = "P-2026-06-01-15-RUST-STREAM-BLOCK-BRIDGE";
+    private final String appVersion = "0.12.4-alpha";
+    private final String patchVersion = "P-2026-06-01-16-RUST-STREAM-FILE-SWITCH";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1386,7 +1386,7 @@ public class MainActivity extends Activity {
                     byte[] plainBlock = Arrays.copyOf(buffer, n);
                     String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
 
-                    byte[] encryptedBlock = QesNative.encryptBytes(
+                    byte[] encryptedBlock = QesNative.encryptStreamBlock(
                             plainBlock,
                             pass,
                             ds[0],
@@ -1397,7 +1397,9 @@ public class MainActivity extends Activity {
                             particleValue,
                             vector,
                             phase,
-                            amplitude
+                            amplitude,
+                            "FILE-STREAM",
+                            blockIndex
                     );
                     throwIfNativeError(encryptedBlock);
 
@@ -1448,7 +1450,7 @@ public class MainActivity extends Activity {
                         "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
                         "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac));
 
-                addLog("Stream encrypt done: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
+                addLog("Stream encrypt done [Rust block bridge]: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
                 final long finalBlockIndex = blockIndex;
                 runOnUiThread(() -> status.setText("Stream šifrování dokončeno. Bloků: " + finalBlockIndex));
             } catch (Throwable e) {
@@ -1552,7 +1554,8 @@ public class MainActivity extends Activity {
                         "\nPUBLIC_SHA256: " + hex(publicHash) +
                         "\nSTREAM_MAC: " + hex(finalMac) +
                         "\nVERIFY_ONLY: OK" +
-                        "\nWRITE_POLICY: NO_OUTPUT_WRITTEN";
+                        "\nWRITE_POLICY: NO_OUTPUT_WRITTEN" +
+                        "\nSTREAM_ENGINE: VERIFY_ONLY_JAVA_MAC";
 
                 addLog("Stream verify-only OK: blocks=" + blockIndex + ", plain=" + plainTotal + " B, cipher=" + cipherTotal + " B");
 
@@ -1691,7 +1694,7 @@ public class MainActivity extends Activity {
                         byte[] encryptedBlock = readFullyExact(decryptInput, encLen);
                         String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
 
-                        byte[] plainBlock = QesNative.decryptBytes(
+                        byte[] plainBlock = QesNative.decryptStreamBlock(
                                 encryptedBlock,
                                 pass,
                                 ds[0],
@@ -1702,7 +1705,9 @@ public class MainActivity extends Activity {
                                 particleValue,
                                 vector,
                                 phase,
-                                amplitude
+                                amplitude,
+                                "FILE-STREAM",
+                                blockIndex
                         );
                         throwIfNativeError(plainBlock);
 
@@ -1753,9 +1758,10 @@ public class MainActivity extends Activity {
                         "\nPUBLIC_SHA256: " + hex(verifiedHash) +
                         "\nSTREAM_MAC: " + hex(verifiedMac) +
                         "\nVERIFY_FIRST: OK" +
-                        "\nWRITE_POLICY: WRITE_AFTER_VERIFY";
+                        "\nWRITE_POLICY: WRITE_AFTER_VERIFY" +
+                        "\nSTREAM_ENGINE: RUST_BLOCK_BRIDGE";
 
-                addLog("Stream verify-first decrypt OK: blocks=" + verifiedBlocks + ", plain=" + verifiedPlainTotal + " B");
+                addLog("Stream verify-first decrypt OK [Rust block bridge]: blocks=" + verifiedBlocks + ", plain=" + verifiedPlainTotal + " B");
                 final long finalBlockIndexDecrypt = verifiedBlocks;
                 runOnUiThread(() -> status.setText("Stream verify-first dešifrování OK. Bloků: " + finalBlockIndexDecrypt));
             } catch (Throwable e) {
