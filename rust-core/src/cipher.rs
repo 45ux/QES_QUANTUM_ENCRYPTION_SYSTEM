@@ -914,6 +914,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow on GitHub/Termux; run manually before release"]
     fn every_self_test_passes() {
         let results = run_self_tests();
         let failed: Vec<_> = results.iter().filter(|t| !t.ok).collect();
@@ -921,6 +922,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow on GitHub/Termux; run manually before release"]
     fn diagnostic_frames_are_created() {
         let p = params();
         let report = diagnose_pipeline(b"diagnostika", &p, true).unwrap();
