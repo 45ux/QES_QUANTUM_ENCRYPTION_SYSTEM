@@ -232,6 +232,142 @@ pub extern "system" fn Java_org_zero_qes_QesNative_decryptBytes(
     }
 }
 
+
+#[allow(clippy::too_many_arguments)]
+fn build_stream_params(
+    env: &mut JNIEnv,
+    password: JString,
+    seed1: JString,
+    seed2: JString,
+    seed3: JString,
+    seed4: JString,
+    glyph: JString,
+    value: i32,
+    vector: JString,
+    phase: i64,
+    amplitude: i32,
+    stream_mode: JString,
+    block_index: i64,
+) -> Result<QcsParams, String> {
+    let password_s = get_string(env, password)?;
+    let seed1_s = get_string(env, seed1)?;
+    let seed2_s = get_string(env, seed2)?;
+    let seed3_s = get_string(env, seed3)?;
+    let seed4_s = get_string(env, seed4)?;
+    let glyph_s = get_string(env, glyph)?;
+    let vector_s = get_string(env, vector)?;
+    let mode_s = get_string(env, stream_mode)?;
+    let safe_index = if block_index < 0 { 0 } else { block_index };
+
+    let glyph_string = glyph_s.chars().next().unwrap_or('X').to_string();
+
+    Ok(QcsParams {
+        password: password_s,
+        seed1: seed1_s,
+        seed2: seed2_s,
+        seed3: seed3_s,
+        seed4: format!("{seed4_s}|QES-STREAM-BLOCK|{mode_s}|{safe_index}"),
+        particle: Particle {
+            glyph: glyph_string,
+            value: value.clamp(0, 255) as u8,
+            vector: vector_s,
+            phase: phase.max(0) as u64,
+            amplitude: amplitude.clamp(0, 255) as u8,
+        },
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_org_zero_qes_QesNative_encryptStreamBlock(
+    mut env: JNIEnv,
+    _class: JClass,
+    data: JByteArray,
+    password: JString,
+    seed1: JString,
+    seed2: JString,
+    seed3: JString,
+    seed4: JString,
+    glyph: JString,
+    value: i32,
+    vector: JString,
+    phase: i64,
+    amplitude: i32,
+    stream_mode: JString,
+    block_index: i64,
+) -> jbyteArray {
+    let result: Result<Vec<u8>, String> = (|| {
+        let input_data = get_bytes(&mut env, data)?;
+        let params = build_stream_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+            stream_mode,
+            block_index,
+        )?;
+        let package = encrypt_to_ascii_art(&input_data, &params).map_err(|e| e.to_string())?;
+        Ok(package.into_bytes())
+    })();
+
+    match result {
+        Ok(bytes) => make_bytes(&mut env, &bytes),
+        Err(e) => make_bytes(&mut env, format!("QES_ERROR: {e}").as_bytes()),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_org_zero_qes_QesNative_decryptStreamBlock(
+    mut env: JNIEnv,
+    _class: JClass,
+    package_bytes: JByteArray,
+    password: JString,
+    seed1: JString,
+    seed2: JString,
+    seed3: JString,
+    seed4: JString,
+    glyph: JString,
+    value: i32,
+    vector: JString,
+    phase: i64,
+    amplitude: i32,
+    stream_mode: JString,
+    block_index: i64,
+) -> jbyteArray {
+    let result: Result<Vec<u8>, String> = (|| {
+        let input_package_bytes = get_bytes(&mut env, package_bytes)?;
+        let package = String::from_utf8(input_package_bytes)
+            .map_err(|_| "QES stream blok není UTF-8 ASCII art".to_string())?;
+        let params = build_stream_params(
+            &mut env,
+            password,
+            seed1,
+            seed2,
+            seed3,
+            seed4,
+            glyph,
+            value,
+            vector,
+            phase,
+            amplitude,
+            stream_mode,
+            block_index,
+        )?;
+        decrypt_from_ascii_art(&package, &params).map_err(|e| e.to_string())
+    })();
+
+    match result {
+        Ok(bytes) => make_bytes(&mut env, &bytes),
+        Err(e) => make_bytes(&mut env, format!("QES_ERROR: {e}").as_bytes()),
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_org_zero_qes_QesNative_selfTest(
     mut env: JNIEnv,

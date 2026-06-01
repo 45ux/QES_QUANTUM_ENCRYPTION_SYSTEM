@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.2-alpha";
-    private final String patchVersion = "P-2026-06-01-14-STREAM-SELF-TEST";
+    private final String appVersion = "0.12.3-alpha";
+    private final String patchVersion = "P-2026-06-01-15-RUST-STREAM-BLOCK-BRIDGE";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -769,6 +769,7 @@ public class MainActivity extends Activity {
 
         LinearLayout rStreamSelf = row();
         rStreamSelf.addView(action("STREAM SELF TEST", v -> runStreamSelfTestMini()));
+        rStreamSelf.addView(action("RUST STREAM TEST", v -> runRustStreamBridgeTest()));
         rStreamSelf.addView(action("ULOŽIT MAC", v -> saveReport()));
         content.addView(rStreamSelf);
 
@@ -2211,6 +2212,117 @@ public class MainActivity extends Activity {
             } catch (Throwable e) {
                 addLog("Stream self test error: " + e.getMessage());
                 runOnUiThread(() -> status.setText("Stream self test skončil chybou."));
+                if (logBox != null) {
+                    runOnUiThread(() -> logBox.setText(log.toString()));
+                }
+            }
+        });
+    }
+
+
+    private void runRustStreamBridgeTest() {
+        saveKeyState();
+
+        if (pass.trim().isEmpty()) pass = "qes-rust-stream-test-password";
+        if (baseSeed.trim().isEmpty()) baseSeed = "seed-main";
+
+        int planned = Math.max(4096, streamBlockSizeBytes + 257);
+        if (!deviceGuardAllows("Rust stream bridge test", planned)) return;
+
+        runGuardedOperation("Rust stream bridge test", () -> {
+            try {
+                addLog("=== RUST STREAM BRIDGE TEST START ===");
+
+                int[] sizes = new int[] {0, 1, 257, 4096};
+                int ok = 0;
+                int fail = 0;
+
+                String[] ds = derivedSeeds("RUST-STREAM-BRIDGE");
+                String streamMode = "RUST-STREAM-BRIDGE";
+
+                for (int i = 0; i < sizes.length; i++) {
+                    int size = sizes[i];
+                    byte[] input = size == 0 ? new byte[0] : randomBytes(size);
+
+                    setProgressState("Rust stream bridge: " + size + " B", Math.max(1, (i * 100) / sizes.length));
+
+                    byte[] encrypted = QesNative.encryptStreamBlock(
+                            input,
+                            pass,
+                            ds[0],
+                            ds[1],
+                            ds[2],
+                            ds[3],
+                            glyph,
+                            particleValue,
+                            vector,
+                            phase,
+                            amplitude,
+                            streamMode,
+                            i
+                    );
+                    throwIfNativeError(encrypted);
+
+                    byte[] decrypted = QesNative.decryptStreamBlock(
+                            encrypted,
+                            pass,
+                            ds[0],
+                            ds[1],
+                            ds[2],
+                            ds[3],
+                            glyph,
+                            particleValue,
+                            vector,
+                            phase,
+                            amplitude,
+                            streamMode,
+                            i
+                    );
+                    throwIfNativeError(decrypted);
+
+                    boolean roundtripOk = Arrays.equals(input, decrypted);
+
+                    byte[] wrongIndex = QesNative.decryptStreamBlock(
+                            encrypted,
+                            pass,
+                            ds[0],
+                            ds[1],
+                            ds[2],
+                            ds[3],
+                            glyph,
+                            particleValue,
+                            vector,
+                            phase,
+                            amplitude,
+                            streamMode,
+                            i + 999
+                    );
+
+                    boolean wrongIndexRejected = isNativeError(wrongIndex) || !Arrays.equals(wrongIndex, input);
+
+                    if (roundtripOk && wrongIndexRejected) ok++;
+                    else fail++;
+
+                    addLog("Rust stream block " + size + " B: "
+                            + ((roundtripOk && wrongIndexRejected) ? "OK" : "FAIL")
+                            + ", encrypted=" + encrypted.length + " B"
+                            + ", wrong-index=" + (wrongIndexRejected ? "OK" : "FAIL"));
+                }
+
+                addLog("RUST STREAM BRIDGE RESULT: OK=" + ok + " FAIL=" + fail);
+                addLog("=== RUST STREAM BRIDGE TEST END ===");
+
+                int finalOk = ok;
+                int finalFail = fail;
+
+                runOnUiThread(() -> status.setText("Rust stream bridge test dokončen: OK=" + finalOk + " FAIL=" + finalFail));
+
+                if (logBox != null) {
+                    runOnUiThread(() -> logBox.setText(log.toString()));
+                }
+            } catch (Throwable e) {
+                addLog("Rust stream bridge error: " + e.getMessage());
+                runOnUiThread(() -> status.setText("Rust stream bridge test skončil chybou."));
                 if (logBox != null) {
                     runOnUiThread(() -> logBox.setText(log.toString()));
                 }
