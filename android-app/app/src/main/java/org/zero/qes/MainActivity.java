@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.1-alpha";
-    private final String patchVersion = "P-2026-06-01-13-STREAM-VERIFY-ONLY";
+    private final String appVersion = "0.12.2-alpha";
+    private final String patchVersion = "P-2026-06-01-14-STREAM-SELF-TEST";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -766,6 +766,11 @@ public class MainActivity extends Activity {
         r2.addView(action("RUST SELF TEST", v -> rustSelfTest()));
         r2.addView(action("ULOŽIT LOG", v -> saveLog()));
         content.addView(r2);
+
+        LinearLayout rStreamSelf = row();
+        rStreamSelf.addView(action("STREAM SELF TEST", v -> runStreamSelfTestMini()));
+        rStreamSelf.addView(action("ULOŽIT MAC", v -> saveReport()));
+        content.addView(rStreamSelf);
 
         LinearLayout r3 = row();
         r3.addView(action("VYČISTIT LOG", v -> clearLog()));
@@ -2031,6 +2036,186 @@ public class MainActivity extends Activity {
                 "\nTAMPER_DETECTION: " + yesNo(zeroLockTamperDetection);
 
         addLog("Security report created: mode=" + mode + ", sha256=" + publicHash + ", zeroLock=" + yesNo(zeroLockEnabled));
+    }
+
+
+    private void runStreamSelfTestMini() {
+        saveKeyState();
+
+        if (pass.trim().isEmpty()) pass = "qes-stream-selftest-password";
+        if (baseSeed.trim().isEmpty()) baseSeed = "seed-main";
+
+        int planned = Math.max(4096, streamBlockSizeBytes + 257);
+        if (!deviceGuardAllows("Stream self test", planned)) return;
+
+        runGuardedOperation("Stream self test", () -> {
+            try {
+                addLog("=== STREAM SELF TEST START ===");
+
+                int blockSize = Math.max(1, streamBlockSizeBytes);
+                int smallBlock = Math.min(4096, blockSize);
+                int[] sizes = new int[] {
+                        0,
+                        1,
+                        257,
+                        smallBlock,
+                        blockSize + 7
+                };
+
+                int ok = 0;
+                int fail = 0;
+
+                for (int i = 0; i < sizes.length; i++) {
+                    int size = sizes[i];
+                    setProgressState("Stream self test: " + size + " B", Math.max(1, (i * 100) / sizes.length));
+
+                    byte[] input = size == 0 ? new byte[0] : randomBytes(size);
+                    ByteArrayOutputStream restored = new ByteArrayOutputStream();
+
+                    MessageDigest publicDigest = MessageDigest.getInstance("SHA-256");
+                    Mac streamMac = newStreamingMac("FILE-STREAM");
+
+                    long blockIndex = 0;
+                    long plainTotal = 0;
+                    long cipherTotal = 0;
+
+                    byte[] firstPlain = null;
+                    byte[] firstEncrypted = null;
+
+                    int pos = 0;
+                    while (pos < input.length) {
+                        int n = Math.min(blockSize, input.length - pos);
+                        byte[] plainBlock = Arrays.copyOfRange(input, pos, pos + n);
+
+                        String[] ds = derivedSeeds("FILE-STREAM-" + blockIndex);
+
+                        byte[] encryptedBlock = QesNative.encryptBytes(
+                                plainBlock,
+                                pass,
+                                ds[0],
+                                ds[1],
+                                ds[2],
+                                ds[3],
+                                glyph,
+                                particleValue,
+                                vector,
+                                phase,
+                                amplitude
+                        );
+                        throwIfNativeError(encryptedBlock);
+
+                        publicDigest.update(encryptedBlock);
+                        streamMac.update(longToBytes(blockIndex));
+                        streamMac.update(intToBytes(n));
+                        streamMac.update(intToBytes(encryptedBlock.length));
+                        streamMac.update(encryptedBlock);
+
+                        byte[] plainBack = QesNative.decryptBytes(
+                                encryptedBlock,
+                                pass,
+                                ds[0],
+                                ds[1],
+                                ds[2],
+                                ds[3],
+                                glyph,
+                                particleValue,
+                                vector,
+                                phase,
+                                amplitude
+                        );
+                        throwIfNativeError(plainBack);
+
+                        if (plainBack.length != n) {
+                            throw new IllegalStateException("STREAM SELF TEST: délka bloku nesouhlasí.");
+                        }
+
+                        restored.write(plainBack);
+
+                        if (firstEncrypted == null) {
+                            firstEncrypted = encryptedBlock.clone();
+                            firstPlain = plainBlock.clone();
+                        }
+
+                        blockIndex++;
+                        plainTotal += n;
+                        cipherTotal += encryptedBlock.length;
+                        pos += n;
+                    }
+
+                    byte[] publicHash = publicDigest.digest();
+                    byte[] finalMac = streamMac.doFinal();
+
+                    boolean roundtripOk = Arrays.equals(input, restored.toByteArray());
+                    boolean macOk = publicHash.length == 32 && finalMac.length == 32;
+
+                    if (roundtripOk && macOk) ok++;
+                    else fail++;
+
+                    addLog("Stream self roundtrip " + size + " B: " + ((roundtripOk && macOk) ? "OK" : "FAIL")
+                            + ", blocks=" + blockIndex
+                            + ", plain=" + plainTotal + " B"
+                            + ", cipher=" + cipherTotal + " B");
+
+                    if (firstEncrypted != null && firstEncrypted.length > 0 && firstPlain != null) {
+                        String[] ds0 = derivedSeeds("FILE-STREAM-0");
+
+                        byte[] wrongKeyOut = QesNative.decryptBytes(
+                                firstEncrypted,
+                                pass + "_bad",
+                                ds0[0],
+                                ds0[1],
+                                ds0[2],
+                                ds0[3],
+                                glyph,
+                                particleValue,
+                                vector,
+                                phase,
+                                amplitude
+                        );
+
+                        boolean wrongKeyRejected = isNativeError(wrongKeyOut) || !Arrays.equals(wrongKeyOut, firstPlain);
+                        addLog("Stream wrong-key block rejection " + size + " B: " + (wrongKeyRejected ? "OK" : "FAIL"));
+
+                        byte[] tampered = firstEncrypted.clone();
+                        tampered[0] ^= 1;
+
+                        byte[] tamperedOut = QesNative.decryptBytes(
+                                tampered,
+                                pass,
+                                ds0[0],
+                                ds0[1],
+                                ds0[2],
+                                ds0[3],
+                                glyph,
+                                particleValue,
+                                vector,
+                                phase,
+                                amplitude
+                        );
+
+                        boolean tamperRejected = isNativeError(tamperedOut) || !Arrays.equals(tamperedOut, firstPlain);
+                        addLog("Stream tamper block rejection " + size + " B: " + (tamperRejected ? "OK" : "CHECK"));
+                    }
+                }
+
+                addLog("STREAM SELF TEST RESULT: OK=" + ok + " FAIL=" + fail);
+                addLog("=== STREAM SELF TEST END ===");
+
+                int finalOk = ok;
+                int finalFail = fail;
+                runOnUiThread(() -> status.setText("Stream self test dokončen: OK=" + finalOk + " FAIL=" + finalFail));
+
+                if (logBox != null) {
+                    runOnUiThread(() -> logBox.setText(log.toString()));
+                }
+            } catch (Throwable e) {
+                addLog("Stream self test error: " + e.getMessage());
+                runOnUiThread(() -> status.setText("Stream self test skončil chybou."));
+                if (logBox != null) {
+                    runOnUiThread(() -> logBox.setText(log.toString()));
+                }
+            }
+        });
     }
 
     private void runDiagnostics() {
