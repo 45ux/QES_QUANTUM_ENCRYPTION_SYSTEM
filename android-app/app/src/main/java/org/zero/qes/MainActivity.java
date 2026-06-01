@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.7-alpha";
-    private final String patchVersion = "P-2026-06-01-19-FILE-OUTPUT-NAME-MAGIC";
+    private final String appVersion = "0.12.8-alpha";
+    private final String patchVersion = "P-2026-06-01-20-FIX-DUPLICATE-FILE-HELPERS";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1328,79 +1328,13 @@ public class MainActivity extends Activity {
     }
 
 
-    private String qesDisplayNameForUri(Uri uri) {
-        if (uri == null) return "";
+    
 
-        android.database.Cursor cursor = null;
-        try {
-            cursor = getContentResolver().query(uri, null, null, null, null);
-            if (cursor != null && cursor.moveToFirst()) {
-                int idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
-                if (idx >= 0) {
-                    String name = cursor.getString(idx);
-                    if (name != null && name.trim().length() > 0) {
-                        return qesCleanFileName(name.trim());
-                    }
-                }
-            }
-        } catch (Throwable ignored) {
-        } finally {
-            try {
-                if (cursor != null) cursor.close();
-            } catch (Throwable ignored) {
-            }
-        }
+    
 
-        return "";
-    }
+    
 
-    private String qesCleanFileName(String name) {
-        if (name == null) return "";
-
-        String clean = name.trim()
-                .replace("/", "_")
-                .replace("\\", "_")
-                .replaceAll("[\\r\\n\\t]", "_");
-
-        while (clean.contains("..")) {
-            clean = clean.replace("..", ".");
-        }
-
-        if (clean.length() > 120) {
-            clean = clean.substring(clean.length() - 120);
-        }
-
-        return clean;
-    }
-
-    private String qesStreamEncryptedOutputName() {
-        String name = qesDisplayNameForUri(secretUri);
-        if (name.length() == 0) name = "encrypted_stream";
-
-        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".qes")) {
-            return name;
-        }
-
-        return name + ".qes";
-    }
-
-    private String qesStreamDecryptedOutputName() {
-        String name = qesDisplayNameForUri(qesUri);
-
-        if (name.length() == 0) {
-            return "decrypted_stream_output.bin";
-        }
-
-        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".qes")) {
-            name = name.substring(0, name.length() - 4);
-        }
-
-        if (name.trim().length() == 0 || "encrypted_stream".equalsIgnoreCase(name.trim())) {
-            return "decrypted_stream_output.bin";
-        }
-
-        return qesCleanFileName(name);
-    }
+    
 
     private void requestStreamEncryptSave() {
         saveKeyState();
