@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.0-alpha";
-    private final String patchVersion = "P-2026-05-31-12-SIDE-RAIL-UI";
+    private final String appVersion = "0.12.1-alpha";
+    private final String patchVersion = "P-2026-05-31-13-FORCE-VISIBLE-RAIL";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -185,7 +185,11 @@ public class MainActivity extends Activity {
         applyColors();
         addLog("QES APK spuštěna.");
         setContentView(app());
-        showOverview();
+        
+        getWindow().getDecorView().postDelayed(new Runnable() {
+            @Override public void run() { qesForceVisibleSideRailV2(); }
+        }, 800L);
+showOverview();
     }
 
     private void applyColors() {
