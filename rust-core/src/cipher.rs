@@ -117,17 +117,28 @@ pub fn decrypt_from_ascii_art(ascii_art_package: &str, params: &QcsParams) -> Re
 
 pub fn encrypt_core(data: &[u8], ctx: &RouteContext) -> Vec<u8> {
     let mut out = data.to_vec();
+
+    // PRE-CORE XOR OTP-like pad:
+    // vstup nejde do difuze/permutace/superpozice nahý.
+    ctx.apply_pre_core_otp(&mut out);
+
     for round in 0..ROUNDS {
         apply_round_forward(&mut out, ctx, round);
     }
+
     out
 }
 
 pub fn decrypt_core(data: &[u8], ctx: &RouteContext) -> Vec<u8> {
     let mut out = data.to_vec();
+
     for round in (0..ROUNDS).rev() {
         apply_round_inverse(&mut out, ctx, round);
     }
+
+    // PRE-CORE pad se odstraňuje až úplně nakonec.
+    ctx.apply_pre_core_otp(&mut out);
+
     out
 }
 
@@ -151,6 +162,14 @@ pub fn diagnose_pipeline(data: &[u8], params: &QcsParams, include_frames: bool) 
     if include_frames {
         push_frame(&mut frames, "00_INPUT", None, &working, vec![
             var("meaning", "původní data", "Toto je stav před prvním skokem."),
+        ]);
+    }
+
+    ctx.apply_pre_core_otp(&mut working);
+    if include_frames {
+        push_frame(&mut frames, "01_PRE_CORE_XOR_OTP_PAD", None, &working, vec![
+            var("meaning", "vstup zamaskovaný OTP-like XOF padem", "Data už před difuzí/permutací/superpozicí nejsou nahá."),
+            var("pad_source", "QES.V3.PRE_CORE_XOR_OTP_PAD", "Pad je dopočítaný z odděleného subklíče, hidden_iv a nonce."),
         ]);
     }
 
@@ -688,7 +707,7 @@ fn diagnostic_guide() -> Vec<String> {
         "1) HEADER_KEY slouží jen k odemčení skryté ZERO hlavičky, kde je nonce.".to_string(),
         "2) NONCE je v balíčku maskované; z hesla + seedů + nonce vzniká hlavní master_seed.".to_string(),
         "3) PERMUTACE mění pořadí bajtů. DIFUZE rozlévá změnu přes data. SUPERPOZICE přičítá proud a rotuje bity.".to_string(),
-        "4) TAG1 je MAC přes encrypted_core, TAG2 chrání skrytou hlavičku/metadata/nosič, TAG3 ZERO-SEAL chrání celý ASCII balíček.".to_string(),
+        "4) PRE-CORE XOR OTP-like pad maskuje vstup před skoky; TAG1/TAG2 mají oddělené subklíče a TAG3 chrání ASCII balíček.".to_string(),
         "5) Nejdřív se ověřují pečetě, až potom se dešifruje. Bit flip nebo změna znaků musí skončit chybou.".to_string(),
         "6) ASCII art je nosič. Jádro encrypted_core zůstává 1:1 vůči vstupu; ASCII text je delší.".to_string(),
     ]
