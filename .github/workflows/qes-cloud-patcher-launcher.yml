@@ -1,0 +1,72 @@
+name: QES Cloud Patcher Launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch where patcher exists and where results will be committed"
+        required: true
+        default: "qes-work-7-github-only-patcher-2"
+        type: string
+      patch:
+        description: "Patch to apply"
+        required: true
+        default: "fast-tests"
+        type: choice
+        options:
+          - fast-tests
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  launch-cloud-patcher:
+    name: Launch QES cloud patcher
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout selected target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Show selected branch
+        run: |
+          echo "Target branch: ${{ inputs.target_branch }}"
+          echo "Patch: ${{ inputs.patch }}"
+          git log --oneline -5
+
+      - name: Check patcher exists
+        run: |
+          test -f tools/qes_patch_runner.py
+          python3 --version
+
+      - name: Apply selected patch
+        run: |
+          python3 tools/qes_patch_runner.py
+
+      - name: Verify Rust quick tests
+        run: |
+          cd rust-core
+          cargo test --lib cipher::tests::core_roundtrip -- --nocapture
+          cargo test --lib cipher::tests::ascii_roundtrip -- --nocapture
+
+      - name: Show diff
+        run: |
+          git status --short
+          git diff --stat
+
+      - name: Commit result back to target branch
+        run: |
+          git config user.name "QES Cloud Patcher"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Apply QES cloud patch: ${{ inputs.patch }}"
+            git push origin HEAD:${{ inputs.target_branch }}
+          else
+            echo "No changes to commit."
+          fi
