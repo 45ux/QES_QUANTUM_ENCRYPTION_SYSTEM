@@ -149,7 +149,7 @@ public final class QesUiShell {
                 }
             }
 
-            install(a);
+            refreshShellPalette(a);
         } catch (Throwable ignored) {
         }
     }
