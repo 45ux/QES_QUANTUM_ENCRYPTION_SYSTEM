@@ -102,8 +102,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.12.6-alpha";
-    private final String patchVersion = "P-2026-06-01-18-STREAM-NORMAL-QES-BLOCKS";
+    private final String appVersion = "0.12.7-alpha";
+    private final String patchVersion = "P-2026-06-01-19-FILE-OUTPUT-NAME-MAGIC";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1933,6 +1933,173 @@ public class MainActivity extends Activity {
         };
     }
 
+
+    private String qesDisplayNameForUri(Uri uri) {
+        if (uri == null) return "";
+
+        android.database.Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0) {
+                    String name = cursor.getString(idx);
+                    if (name != null && name.trim().length() > 0) {
+                        return qesCleanFileName(name.trim());
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            try {
+                if (cursor != null) cursor.close();
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return "";
+    }
+
+    private String qesCleanFileName(String name) {
+        if (name == null) return "";
+
+        String clean = name.trim()
+                .replace("/", "_")
+                .replace("\\", "_")
+                .replaceAll("[\\r\\n\\t]", "_");
+
+        while (clean.contains("..")) {
+            clean = clean.replace("..", ".");
+        }
+
+        if (clean.length() > 160) {
+            clean = clean.substring(clean.length() - 160);
+        }
+
+        return clean;
+    }
+
+    private String qesRemoveQesSuffix(String name) {
+        if (name == null) return "";
+
+        String out = qesCleanFileName(name);
+        String lower = out.toLowerCase(java.util.Locale.ROOT);
+
+        if (lower.endsWith(".qes")) {
+            out = out.substring(0, out.length() - 4);
+        }
+
+        return qesCleanFileName(out);
+    }
+
+    private String qesFileEncryptSuggestedName(Uri inputUri) {
+        String name = qesDisplayNameForUri(inputUri);
+
+        if (name.length() == 0) {
+            name = "encrypted_file";
+        }
+
+        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".qes")) {
+            return name;
+        }
+
+        return qesCleanFileName(name + ".qes");
+    }
+
+    private String qesFileDecryptSuggestedName(Uri qesInputUri, byte[] decryptedBytes) {
+        String base = qesRemoveQesSuffix(qesDisplayNameForUri(qesInputUri));
+
+        if (base.length() == 0 ||
+            base.equalsIgnoreCase("encrypted") ||
+            base.toLowerCase(java.util.Locale.ROOT).startsWith("encrypted ")) {
+            base = "decrypted_output";
+        }
+
+        String ext = qesExtensionFromMagic(decryptedBytes);
+        String lower = base.toLowerCase(java.util.Locale.ROOT);
+
+        if (ext.length() > 0 && !lower.endsWith(ext)) {
+            if (lower.endsWith(".bin")) {
+                base = base.substring(0, base.length() - 4);
+            }
+            base = base + ext;
+        }
+
+        if (ext.length() == 0 && !lower.contains(".")) {
+            base = base + ".bin";
+        }
+
+        return qesCleanFileName(base);
+    }
+
+    private String qesStreamEncryptedOutputName() {
+        return qesFileEncryptSuggestedName(secretUri);
+    }
+
+    private String qesStreamDecryptedOutputName() {
+        String name = qesRemoveQesSuffix(qesDisplayNameForUri(qesUri));
+
+        if (name.length() == 0 ||
+            name.equalsIgnoreCase("encrypted_stream") ||
+            name.equalsIgnoreCase("encrypted")) {
+            return "decrypted_stream_output.bin";
+        }
+
+        return qesCleanFileName(name);
+    }
+
+    private String qesExtensionFromMagic(byte[] data) {
+        if (data == null || data.length < 4) return "";
+
+        if (data.length >= 5 &&
+            data[0] == 0x25 && data[1] == 0x50 && data[2] == 0x44 && data[3] == 0x46 && data[4] == 0x2D) {
+            return ".pdf";
+        }
+
+        if ((data[0] & 0xff) == 0xff && (data[1] & 0xff) == 0xd8 && (data[2] & 0xff) == 0xff) {
+            return ".jpg";
+        }
+
+        if (data.length >= 8 &&
+            (data[0] & 0xff) == 0x89 && data[1] == 0x50 && data[2] == 0x4e && data[3] == 0x47 &&
+            data[4] == 0x0d && data[5] == 0x0a && data[6] == 0x1a && data[7] == 0x0a) {
+            return ".png";
+        }
+
+        if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38) {
+            return ".gif";
+        }
+
+        if (data[0] == 0x50 && data[1] == 0x4b && data[2] == 0x03 && data[3] == 0x04) {
+            return ".zip";
+        }
+
+        if (data.length >= 12 &&
+            data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70) {
+            return ".mp4";
+        }
+
+        if (data[0] == 0x7b || data[0] == 0x5b) {
+            return ".json";
+        }
+
+        return "";
+    }
+
+    private String qesMimeFromMagic(byte[] data) {
+        String ext = qesExtensionFromMagic(data);
+
+        if (".pdf".equals(ext)) return "application/pdf";
+        if (".jpg".equals(ext)) return "image/jpeg";
+        if (".png".equals(ext)) return "image/png";
+        if (".gif".equals(ext)) return "image/gif";
+        if (".zip".equals(ext)) return "application/zip";
+        if (".mp4".equals(ext)) return "video/mp4";
+        if (".json".equals(ext)) return "application/json";
+
+        return "application/octet-stream";
+    }
+
     private void encryptSelectedFile() {
         saveKeyState();
         if (!keyReady("File encrypt")) return;
@@ -1949,7 +2116,7 @@ public class MainActivity extends Activity {
             updateSecurityReport("FILE", out);
             long ms = System.currentTimeMillis() - started;
             addLog("File encrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms);
-            saveBytes(out, "encrypted.qes", "application/octet-stream");
+            saveBytes(out, qesFileEncryptSuggestedName(secretUri), "application/octet-stream");
         } catch (Throwable e) {
             addLog("File encrypt error: " + e.getMessage());
             showErrorDialog("Chyba souborového šifrování", e.getMessage());
@@ -1971,8 +2138,8 @@ public class MainActivity extends Activity {
             throwIfNativeError(out);
             updateSecurityReport("FILE-DECRYPTED", out);
             long ms = System.currentTimeMillis() - started;
-            addLog("File decrypted: input=" + data.length + " B, output=" + out.length + " B, ms=" + ms);
-            saveBytes(out, "decrypted_output.bin", "application/octet-stream");
+            addLog("File decrypted: input=" + data.length + " B, output=" + out.length + " B, sha256=" + sha256(out) + ", ms=" + ms);
+            saveBytes(out, qesFileDecryptSuggestedName(qesUri, out), qesMimeFromMagic(out));
         } catch (Throwable e) {
             addLog("File decrypt error: " + e.getMessage());
             showErrorDialog("Chyba souborového dešifrování", e.getMessage());
