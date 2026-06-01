@@ -118,13 +118,19 @@ pub fn decrypt_from_ascii_art(ascii_art_package: &str, params: &QcsParams) -> Re
 pub fn encrypt_core(data: &[u8], ctx: &RouteContext) -> Vec<u8> {
     let mut out = data.to_vec();
 
-    // PRE-CORE XOR OTP-like pad:
+    // 1) PRE-CORE XOR OTP-like pad:
     // vstup nejde do difuze/permutace/superpozice nahý.
     ctx.apply_pre_core_otp(&mut out);
 
+    // 2) QES core kola.
     for round in 0..ROUNDS {
         apply_round_forward(&mut out, ctx, round);
     }
+
+    // 3) TAG1 a TAG2 jako skryté XOF XOR masky.
+    // Nejsou viditelné v souboru jako řádky; jsou to reverzibilní maskovací vrstvy.
+    ctx.apply_tag1_hidden_mask(&mut out);
+    ctx.apply_tag2_hidden_mask(&mut out);
 
     out
 }
@@ -132,11 +138,16 @@ pub fn encrypt_core(data: &[u8], ctx: &RouteContext) -> Vec<u8> {
 pub fn decrypt_core(data: &[u8], ctx: &RouteContext) -> Vec<u8> {
     let mut out = data.to_vec();
 
+    // 1) Odstranit TAG2 a TAG1 v opačném pořadí.
+    ctx.apply_tag2_hidden_mask(&mut out);
+    ctx.apply_tag1_hidden_mask(&mut out);
+
+    // 2) Vrátit QES core kola.
     for round in (0..ROUNDS).rev() {
         apply_round_inverse(&mut out, ctx, round);
     }
 
-    // PRE-CORE pad se odstraňuje až úplně nakonec.
+    // 3) PRE-CORE pad se odstraňuje až úplně nakonec.
     ctx.apply_pre_core_otp(&mut out);
 
     out
@@ -194,6 +205,22 @@ pub fn diagnose_pipeline(data: &[u8], params: &QcsParams, include_frames: bool) 
         let diff_b = ctx.round_bytes(round, "diff-b", len.max(1));
         diffuse_forward(&mut working, &diff_b);
         if include_frames { push_frame(&mut frames, "DIFUZE_B", Some(round), &working, vec![var("stream_fingerprint", &fingerprint(&diff_b), "Otisk proudu pro druhou difuzi kola; proud se nezobrazuje.")]); }
+    }
+
+    ctx.apply_tag1_hidden_mask(&mut working);
+    if include_frames {
+        push_frame(&mut frames, "TAG1_HIDDEN_XOF_MASK", None, &working, vec![
+            var("meaning", "TAG1 skrytá XOF XOR maska", "První interní tagová maska není viditelný řádek v souboru."),
+            var("zero_model", "ZERO_UNDER_TAG1", "ZERO bude navázané pod TAG1 jako skrytá vnitřní visačka."),
+        ]);
+    }
+
+    ctx.apply_tag2_hidden_mask(&mut working);
+    if include_frames {
+        push_frame(&mut frames, "TAG2_HIDDEN_XOF_MASK", None, &working, vec![
+            var("meaning", "TAG2 skrytá XOF XOR maska", "Druhá interní tagová maska leží nad TAG1 vrstvou."),
+            var("tag3_model", "ASCII_WAVE_SEAL", "TAG3 je vrstva nad ASCII artem, ne další změna core dat."),
+        ]);
     }
 
     let encrypted_core = working;

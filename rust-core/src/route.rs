@@ -87,9 +87,8 @@ impl RouteContext {
         )
     }
 
-    // Interní XOF kaskáda pro dlouhé OTP-like pady a masky.
-    // Teď běží nad BLAKE3 XOF ve třech oddělených doménách.
-    // Názvy STAGE1/STAGE2/STAGE3 připravují místo pro pozdější SHAKE256 -> KMAC256 -> BLAKE3.
+    // Interní XOF kaskáda pro OTP-like pady a tagové masky.
+    // Stage názvy připravují místo pro pozdější SHAKE256 -> KMAC256 -> BLAKE3.
     pub fn xof_cascade_with_key(
         &self,
         key: &[u8; 32],
@@ -188,7 +187,6 @@ impl RouteContext {
         out
     }
 
-    // MAC s oddělenými subklíči podle labelu.
     pub fn mac(&self, label: &str, parts: &[&[u8]], len: usize) -> Vec<u8> {
         let upper = label.to_ascii_uppercase();
 
@@ -249,7 +247,43 @@ impl RouteContext {
         )
     }
 
-    // Skrytí / odemčení ZERO metadat. Stejná operace slouží oběma směry.
+    // Reversibilní TAG1 maska. Context tag je odvozený ze subklíče a nonce,
+    // aby šel při dešifrování dopočítat bez znalosti neodmaskovaného stavu.
+    pub fn apply_tag1_hidden_mask(&self, data: &mut [u8]) {
+        if data.is_empty() {
+            return;
+        }
+
+        let tag = self.mac(
+            "TAG1_CONTEXT_UNDER_XOR_REVERSIBLE_MASK",
+            &[b"tag1-hidden-mask-context"],
+            32,
+        );
+        let mask = self.tag1_mask(&tag, data.len());
+
+        for (b, k) in data.iter_mut().zip(mask.iter()) {
+            *b ^= *k;
+        }
+    }
+
+    // Reversibilní TAG2 maska nad výsledkem po TAG1.
+    pub fn apply_tag2_hidden_mask(&self, data: &mut [u8]) {
+        if data.is_empty() {
+            return;
+        }
+
+        let tag = self.mac(
+            "TAG2_CONTEXT_OVER_XOR_REVERSIBLE_MASK",
+            &[b"tag2-hidden-mask-context"],
+            32,
+        );
+        let mask = self.tag2_mask(&tag, data.len());
+
+        for (b, k) in data.iter_mut().zip(mask.iter()) {
+            *b ^= *k;
+        }
+    }
+
     pub fn mask_metadata(&self, data: &[u8]) -> Vec<u8> {
         let stream = self.xof_cascade_with_key(
             &self.zero_key,
