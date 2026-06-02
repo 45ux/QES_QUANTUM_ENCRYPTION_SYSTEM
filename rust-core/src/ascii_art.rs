@@ -143,7 +143,7 @@ pub fn replicate_to_ascii_art(
     );
 
     let hidden_header = mask_header(header_seed, header.full_string().as_bytes());
-    let header_line = format!("ZERO:{}", B64URL.encode(&hidden_header));
+    let header_line = encode_art_bytes(&hidden_header);
 
     let mut body_for_seal = String::new();
     body_for_seal.push_str(BEGIN);
@@ -155,8 +155,7 @@ pub fn replicate_to_ascii_art(
     let zero_seal = ctx.mac("TAG3_ZERO_SEAL_WHOLE_ASCII_PACKAGE", &[body_for_seal.as_bytes()], TAG_LEN);
 
     let mut out = body_for_seal;
-    out.push_str("SEAL:");
-    out.push_str(&B64URL.encode(&zero_seal));
+    out.push_str(&encode_art_bytes(&zero_seal));
     out.push('\n');
     out.push_str(END);
     out.push('\n');
@@ -205,7 +204,15 @@ pub fn parse_package(package: &str, header_seed: &[u8; MASTER_SEED_LEN]) -> Resu
         return Err(anyhow!("Chybí konec QCS ASCII ART balíčku"));
     }
 
-    let seal_line = seal_line.ok_or_else(|| anyhow!("Chybí TAG3 ZERO-SEAL"))?;
+    let seal_line = if let Some(seal_line) = seal_line {
+        seal_line
+    } else {
+        grid_lines
+            .pop()
+            .ok_or_else(|| anyhow!("Chybí skrytý TAG3 art seal"))?
+            .trim()
+            .to_string()
+    };
     let zero_seal = parse_seal(&seal_line)?;
 
     let mut grid_text = String::new();
@@ -290,12 +297,13 @@ pub fn extract_from_parsed_ascii_art(
 }
 
 fn parse_hidden_header(line: &str, header_seed: &[u8; MASTER_SEED_LEN]) -> Result<HiddenHeader> {
-    let encoded = line
-        .strip_prefix("ZERO:")
-        .ok_or_else(|| anyhow!("Chybí ZERO hlavička"))?;
-    let masked = B64URL
-        .decode(encoded.as_bytes())
-        .map_err(|_| anyhow!("Neplatná skrytá ZERO hlavička"))?;
+    let masked = if let Some(encoded) = line.strip_prefix("ZERO:") {
+        B64URL
+            .decode(encoded.as_bytes())
+            .map_err(|_| anyhow!("Neplatná skrytá ZERO hlavička"))?
+    } else {
+        decode_art_bytes(line)?
+    };
     let plain = mask_header(header_seed, &masked);
     let plain = String::from_utf8(plain)
         .map_err(|_| anyhow!("Skrytá ZERO hlavička nejde odemknout: špatné heslo/seedy nebo poškozený soubor"))?;
@@ -340,16 +348,43 @@ fn parse_hidden_header(line: &str, header_seed: &[u8; MASTER_SEED_LEN]) -> Resul
 }
 
 fn parse_seal(line: &str) -> Result<Vec<u8>> {
-    let encoded = line
-        .strip_prefix("SEAL:")
-        .ok_or_else(|| anyhow!("Neplatný řádek ZERO-SEAL"))?;
-    let seal = B64URL
-        .decode(encoded.as_bytes())
-        .map_err(|_| anyhow!("Neplatný TAG3 ZERO-SEAL"))?;
+    let seal = if let Some(encoded) = line.strip_prefix("SEAL:") {
+        B64URL
+            .decode(encoded.as_bytes())
+            .map_err(|_| anyhow!("Neplatný TAG3 ZERO-SEAL"))?
+    } else {
+        decode_art_bytes(line)?
+    };
     if seal.len() != TAG_LEN {
         return Err(anyhow!("TAG3 ZERO-SEAL nemá správnou délku"));
     }
     Ok(seal)
+}
+
+fn encode_art_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(DATA_PALETTE[(b >> 4) as usize] as char);
+        out.push(DATA_PALETTE[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn decode_art_bytes(s: &str) -> Result<Vec<u8>> {
+    let chars: Vec<char> = s.trim().chars().collect();
+    if chars.len() % 2 != 0 {
+        return Err(anyhow!("Skrytý art blok má lichý počet znaků"));
+    }
+
+    let mut out = Vec::with_capacity(chars.len() / 2);
+    for pair in chars.chunks_exact(2) {
+        let hi = palette_index(pair[0])
+            .ok_or_else(|| anyhow!("Neplatný znak ve skrytém art bloku: '{}'", pair[0]))?;
+        let lo = palette_index(pair[1])
+            .ok_or_else(|| anyhow!("Neplatný znak ve skrytém art bloku: '{}'", pair[1]))?;
+        out.push((hi << 4) | lo);
+    }
+    Ok(out)
 }
 
 fn mask_header(header_seed: &[u8; MASTER_SEED_LEN], data: &[u8]) -> Vec<u8> {

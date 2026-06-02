@@ -58,8 +58,8 @@ fn ascii_art_is_text_carrier_with_hidden_header_and_seal() {
     let art = encrypt_to_ascii_art(data, &p).unwrap();
     assert!(art.contains("BEGIN QCS ASCII ART"));
     assert!(art.contains("END QCS ASCII ART"));
-    assert!(art.contains("ZERO:"));
-    assert!(art.contains("SEAL:"));
+    assert!(!art.contains("ZERO:"));
+    assert!(!art.contains("SEAL:"));
     assert!(!art.contains("QCSAA1 len="), "viditelna technicka hlavicka QCSAA1 len=... ma byt odstranena");
     assert!(!art.contains("ZEROQCS6|"), "ZEROQCS6 hlavička má být schovaná/maskovaná");
     assert!(art.lines().count() >= 10, "ASCII art ma mit vice radku a viditelny tvar");
@@ -122,7 +122,7 @@ fn diagnostic_report_contains_frames_and_manual() {
     assert!(report.frames.iter().any(|f| f.stage == "DIFUZE_A"));
     assert!(report.frames.iter().any(|f| f.stage == "SUPERPOZICE"));
     assert!(report.frames.iter().any(|f| f.stage == "ENCRYPTED_CORE_1_1"));
-    assert!(report.frames.iter().any(|f| f.stage == "ASCII_ART_NOSIC_TAG3_ZERO_SEAL"));
+    assert!(report.frames.iter().any(|f| f.stage == "ASCII_ART_CARRIER_TAG3_SEAL"));
     assert!(report.frames.iter().all(|f| !f.checksum.is_empty()));
     assert!(report.frames.iter().all(|f| !f.ascii_image.is_empty()));
 }

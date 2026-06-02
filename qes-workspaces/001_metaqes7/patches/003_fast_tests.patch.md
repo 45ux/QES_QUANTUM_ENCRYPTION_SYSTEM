@@ -1,6 +1,6 @@
 # Patch 003 — Fast Termux tests
 
-Status: PLANNED
+Status: APPLIED BY GITHUB PATCHER
 
 Cíl:
 Na mobilu v Termuxu nemají běžet dlouhé diagnostické testy automaticky, protože mohou viset přes 60 sekund a zbytečně vybíjet telefon.
@@ -34,3 +34,17 @@ cargo test diagnostic_frames_are_created -- --ignored --nocapture
 
 Poznámka:
 Toto není změna šifrování. Je to pouze úprava testovacího režimu pro mobilní Termux workflow.
+
+
+## Applied by GitHub-only patch runner
+
+Branch:
+
+```text
+qes-work-7-github-only-patcher-2
+```
+
+Effect:
+- long diagnostic Rust tests are now ignored by default;
+- they remain available through `--ignored` before release;
+- no cipher logic was changed by this patch.
