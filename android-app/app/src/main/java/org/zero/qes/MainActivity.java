@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.4b-alpha";
-    private final String patchVersion = "P-2026-06-02-09B-QES-VAULT-OS-ALCATRAZ-AI-BUILD-FIX";
+    private final String appVersion = "0.13.4c-alpha";
+    private final String patchVersion = "P-2026-06-02-09C-QES-VAULT-OS-TERMINAL-VISIBLE";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1150,6 +1150,21 @@ public class MainActivity extends Activity {
         if (cmd.isEmpty()) cmd = "help";
         if (mutate) addLog("Vault command: " + cmd);
 
+        if ("boot".equals(cmd)) {
+            return "QES VAULT OS BOOT\n"
+                    + "STATUS: ONLINE\n"
+                    + "RUNTIME: ALCATRAZ SANDBOX\n"
+                    + "REAL_SHELL: BLOCKED\n"
+                    + "SYSTEM_COMMANDS: BLOCKED\n"
+                    + "DIRECT_FILESYSTEM: BLOCKED\n"
+                    + "NETWORK_API: BLOCKED_IN_THIS_PATCH\n"
+                    + "QES_INTERNAL_API: ENABLED\n"
+                    + "USER_CONFIRM_RUN: REQUIRED\n"
+                    + "PATCH: " + patchVersion + "\n\n"
+                    + "Napiš příkaz do terminálu nebo použij AI řádku.\n"
+                    + "Dostupné: help, app info, security status, api help, selftest, show report, show verify_key";
+        }
+
         if ("help".equals(cmd)) {
             return "QES VAULT CONSOLE / WHITELIST\n"
                     + "help            - zobrazí povolené příkazy\n"
@@ -1256,19 +1271,19 @@ public class MainActivity extends Activity {
     }
 
 
-    private void showVaultOsAlcatraz() {
+        private void showVaultOsAlcatraz() {
         clear();
         currentPage = "vault";
         section("QES VAULT OS / ALCATRAZ");
 
         card("Virtuální prostředí uvnitř aplikace",
-                "Toto není bootovaný operační systém ani otevřený Linux shell. Je to pevně uzavřené QES virtuální prostředí: příkazový runtime, interní API a AI řádka. AI může navrhnout příkaz do terminálu, ale uživatel ho musí potvrdit tlačítkem RUN.");
+                "AI řádka a terminál jsou nyní zobrazené pod sebou jako velké panely, aby byl výstup na mobilu čitelný. AI pouze navrhuje povolený QES příkaz. Spuštění musí potvrdit uživatel tlačítkem RUN.");
 
         controlTable("ALCATRAZ HRANICE", new String[][]{
                 {"REAL SHELL", "ZAKÁZÁNO"},
                 {"SYSTÉMOVÉ PŘÍKAZY", "ZAKÁZÁNO"},
                 {"FILESYSTEM DIRECT", "ZAKÁZÁNO"},
-                {"NETWORK/API", "JEN PLÁNOVANÝ KONEKTOR"},
+                {"NETWORK/API", "BLOKOVÁNO V TOMTO PATCHI"},
                 {"QES INTERNAL API", "POVOLENO"},
                 {"USER CONFIRM", "POVINNÉ"}
         });
@@ -1276,40 +1291,56 @@ public class MainActivity extends Activity {
         vaultAiInput = field("AI řádka – napiš, co chceš udělat", false, "ukaž security status");
         vaultInput = field("Terminál – povolený QES příkaz", false, "help");
 
-        LinearLayout split = row();
-        vaultAiChat = area("AI CHAT / návrhy příkazů");
-        vaultTerminal = area("QES TERMINÁL / výstup");
-        vaultAiChat.setMinLines(11);
-        vaultTerminal.setMinLines(11);
-        vaultAiChat.setText("QES-AI: Jsem uzavřený operátor Vault OS. Nepíšu do systému, jen navrhuji povolené QES příkazy.\nNapiš požadavek a stiskni AI → TERMINÁL.");
-        vaultTerminal.setText(executeVaultOsCommand("help", false));
-        split.addView(vaultAiChat);
-        split.addView(vaultTerminal);
+        content.addView(vaultAiInput);
+        content.addView(vaultInput);
 
         LinearLayout r1 = row();
         r1.addView(action("AI → TERMINÁL", v -> aiToVaultTerminal()));
         r1.addView(action("RUN", v -> runVaultOsCommand()));
-        content.addView(vaultAiInput);
-        content.addView(vaultInput);
         content.addView(r1);
 
         LinearLayout r2 = row();
-        r2.addView(action("SECURITY", v -> setVaultCommandAndRun("security status")));
-        r2.addView(action("VERIFY KEY", v -> setVaultCommandAndRun("show verify_key")));
+        r2.addView(action("BOOT", v -> {
+            if (vaultInput != null) vaultInput.setText("boot");
+            String result = executeVaultOsCommand("boot", true);
+            if (vaultTerminal != null) vaultTerminal.setText(result);
+        }));
+        r2.addView(action("HELP", v -> setVaultCommandAndRun("help")));
         content.addView(r2);
 
         LinearLayout r3 = row();
-        r3.addView(action("API HELP", v -> setVaultCommandAndRun("api help")));
-        r3.addView(action("SELFTEST", v -> setVaultCommandAndRun("selftest")));
+        r3.addView(action("SECURITY", v -> setVaultCommandAndRun("security status")));
+        r3.addView(action("VERIFY KEY", v -> setVaultCommandAndRun("show verify_key")));
         content.addView(r3);
 
         LinearLayout r4 = row();
-        r4.addView(action("REPORT", v -> setVaultCommandAndRun("show report")));
-        r4.addView(action("CLEAR", v -> setVaultCommandAndRun("clear log")));
+        r4.addView(action("API HELP", v -> setVaultCommandAndRun("api help")));
+        r4.addView(action("SELFTEST", v -> setVaultCommandAndRun("selftest")));
         content.addView(r4);
 
-        content.addView(split);
+        LinearLayout r5 = row();
+        r5.addView(action("REPORT", v -> setVaultCommandAndRun("show report")));
+        r5.addView(action("CLEAR", v -> setVaultCommandAndRun("clear log")));
+        content.addView(r5);
+
+        vaultAiChat = area("AI CHAT / návrhy příkazů");
+        vaultAiChat.setMinLines(8);
+        vaultAiChat.setText(
+                "QES-AI ONLINE\n"
+                        + "Role: uzavřený operátor Vault OS.\n"
+                        + "Pravidlo: AI nesmí spustit systémový shell. Jen navrhne QES příkaz.\n"
+                        + "Postup: napiš požadavek → AI → TERMINÁL → RUN.\n");
+
+        vaultTerminal = area("QES TERMINÁL / výstup");
+        vaultTerminal.setMinLines(14);
+        vaultTerminal.setText(executeVaultOsCommand("boot", false));
+
+        content.addView(vaultAiChat);
+        content.addView(vaultTerminal);
+
+        status.setText("Vault OS připraven. Výstup terminálu je dole v panelu QES TERMINÁL.");
     }
+
 
     private void aiToVaultTerminal() {
         String request = vaultAiInput == null ? "" : vaultAiInput.getText().toString();
@@ -1356,6 +1387,21 @@ public class MainActivity extends Activity {
                     + "Příkaz: " + rawCommand + "\n\n"
                     + "Toto není Linux shell. Vault OS smí volat jen QES interní API a whitelist příkazy.\n"
                     + "Zadej: help nebo api help";
+        }
+
+        if ("boot".equals(cmd)) {
+            return "QES VAULT OS BOOT\n"
+                    + "STATUS: ONLINE\n"
+                    + "RUNTIME: ALCATRAZ SANDBOX\n"
+                    + "REAL_SHELL: BLOCKED\n"
+                    + "SYSTEM_COMMANDS: BLOCKED\n"
+                    + "DIRECT_FILESYSTEM: BLOCKED\n"
+                    + "NETWORK_API: BLOCKED_IN_THIS_PATCH\n"
+                    + "QES_INTERNAL_API: ENABLED\n"
+                    + "USER_CONFIRM_RUN: REQUIRED\n"
+                    + "PATCH: " + patchVersion + "\n\n"
+                    + "Napiš příkaz do terminálu nebo použij AI řádku.\n"
+                    + "Dostupné: help, app info, security status, api help, selftest, show report, show verify_key";
         }
 
         if ("help".equals(cmd)) {
