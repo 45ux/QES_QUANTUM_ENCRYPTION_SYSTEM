@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.4-alpha";
-    private final String patchVersion = "P-2026-06-02-09-QES-VAULT-OS-ALCATRAZ-AI";
+    private final String appVersion = "0.13.4b-alpha";
+    private final String patchVersion = "P-2026-06-02-09B-QES-VAULT-OS-ALCATRAZ-AI-BUILD-FIX";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1501,10 +1501,6 @@ public class MainActivity extends Activity {
         } catch (Throwable e) {
             return "FAILED";
         }
-    }
-
-    private String on(boolean value) {
-        return value ? "ON" : "OFF";
     }
 
     private void refreshSettings(String msg) {
