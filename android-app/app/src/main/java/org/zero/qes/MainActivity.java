@@ -103,7 +103,7 @@ public class MainActivity extends Activity {
     private String artProfile = "ZERO GRID";
 
     private final String appVersion = "0.13.2-alpha";
-    private final String patchVersion = "P-2026-06-01-24-METAQES7-ZERO-UNDER-TAG1";
+    private final String patchVersion = "P-2026-06-02-08-QES-VERIFY-KEY";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1437,6 +1437,15 @@ public class MainActivity extends Activity {
 
                 byte[] publicHash = publicDigest.digest();
                 byte[] finalMac = streamMac.doFinal();
+                String publicHashHex = hex(publicHash);
+                String finalMacHex = hex(finalMac);
+                String qesVerifyKey = sha256((
+                        "QES_VERIFY_KEY|FILE-STREAM|" +
+                        plainTotal + "|" +
+                        cipherTotal + "|" +
+                        publicHashHex + "|" +
+                        finalMacHex
+                ).getBytes(StandardCharsets.UTF_8));
 
                 os.write(publicHash);
                 os.write(finalMac);
@@ -1454,8 +1463,11 @@ public class MainActivity extends Activity {
                         "\nBLOCK_COUNT: " + blockIndex +
                         "\nPLAIN_SIZE: " + plainTotal + " B" +
                         "\nCIPHER_SIZE: " + cipherTotal + " B" +
-                        "\nPUBLIC_SHA256: " + hex(publicHash) +
-                        "\nSTREAM_MAC: " + hex(finalMac) +
+                        "\nQES_VERIFY_KEY: " + qesVerifyKey +
+                        "\nQES_VERIFY_PUBLIC_SHA256: " + publicHashHex +
+                        "\nQES_VERIFY_MAC: " + finalMacHex +
+                        "\nPUBLIC_SHA256: " + publicHashHex +
+                        "\nSTREAM_MAC: " + finalMacHex +
                         "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
                         "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac)) +
                         "\nSTREAM_ENGINE: NORMAL_QES_BLOCKS_V1";
@@ -2194,6 +2206,13 @@ public class MainActivity extends Activity {
 
         String publicHash = sha256(output);
         String mac = hmacHex(mode, output);
+        String qesVerifyKey = sha256((
+                "QES_VERIFY_KEY|" +
+                mode + "|" +
+                output.length + "|" +
+                publicHash + "|" +
+                mac
+        ).getBytes(StandardCharsets.UTF_8));
         lastCapsule128 = makeCapsule128(mode, output);
 
         String zeroLockSeal = zeroLockEnabled ? zeroLockMacHex(mode, output) : "ZERO_LOCK_DISABLED";
@@ -2202,6 +2221,9 @@ public class MainActivity extends Activity {
                 "QES SECURITY REPORT" +
                 "\nMODE: " + mode +
                 "\nSIZE: " + output.length + " B" +
+                "\nQES_VERIFY_KEY: " + qesVerifyKey +
+                "\nQES_VERIFY_PUBLIC_SHA256: " + publicHash +
+                "\nQES_VERIFY_MAC: " + mac +
                 "\nAPP_VERSION: " + appVersion +
                 "\nPATCH: " + patchVersion +
                 "\nART_PROFILE: " + artProfile +
