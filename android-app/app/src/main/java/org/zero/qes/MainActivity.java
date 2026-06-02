@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.8c-alpha";
-    private final String patchVersion = "P-2026-06-02-12C-QES-VAULT-STATE-BUILD-FIX";
+    private final String appVersion = "0.13.9-alpha";
+    private final String patchVersion = "P-2026-06-02-13-QES-ARCHITECTURE-AUDIT-BASELINE";
     private boolean vaultUnlocked = false;
     private long vaultUnlockedAtMs = 0L;
     private String vaultLockMode = "LOCKED";
@@ -1159,6 +1159,22 @@ public class MainActivity extends Activity {
         if (cmd.isEmpty()) cmd = "help";
         if (mutate) addLog("Vault command: " + cmd);
 
+        if ("architecture audit".equals(cmd) || "arch audit".equals(cmd) || "audit".equals(cmd)) {
+            return buildQesArchitectureAuditText();
+        }
+
+        if ("function audit".equals(cmd) || "audit map".equals(cmd) || "function map".equals(cmd)) {
+            return buildQesFunctionAuditMapText();
+        }
+
+        if ("risk map".equals(cmd) || "audit risk".equals(cmd) || "risks".equals(cmd)) {
+            return buildQesRiskMapText();
+        }
+
+        if ("next architecture steps".equals(cmd) || "next steps".equals(cmd) || "roadmap next".equals(cmd)) {
+            return buildQesNextArchitectureStepsText();
+        }
+
         if ("seed vault".equals(cmd) || "seed vault status".equals(cmd) || "seed status".equals(cmd)) {
             return buildQesSeedVaultStatusText();
         }
@@ -1386,6 +1402,17 @@ public class MainActivity extends Activity {
         rQesForceVaultButtons4.addView(action("VAULT STATUS", v -> setVaultCommandAndRun("vault status")));
         content.addView(rQesForceVaultButtons4);
 
+
+        LinearLayout rQesAuditButtons = row();
+        rQesAuditButtons.addView(action("ARCH AUDIT", v -> setVaultCommandAndRun("architecture audit")));
+        rQesAuditButtons.addView(action("AUDIT MAP", v -> setVaultCommandAndRun("function audit")));
+        content.addView(rQesAuditButtons);
+
+        LinearLayout rQesAuditButtons2 = row();
+        rQesAuditButtons2.addView(action("RISK MAP", v -> setVaultCommandAndRun("risk map")));
+        rQesAuditButtons2.addView(action("NEXT STEPS", v -> setVaultCommandAndRun("next architecture steps")));
+        content.addView(rQesAuditButtons2);
+
         vaultAiChat = area("AI CHAT / návrhy příkazů");
         vaultAiChat.setMinLines(8);
         vaultAiChat.setText(
@@ -1453,6 +1480,22 @@ public class MainActivity extends Activity {
                     + "Příkaz: " + rawCommand + "\n\n"
                     + "Toto není Linux shell. Vault OS smí volat jen QES interní API a whitelist příkazy.\n"
                     + "Zadej: help nebo api help";
+        }
+
+        if ("architecture audit".equals(cmd) || "arch audit".equals(cmd) || "audit".equals(cmd)) {
+            return buildQesArchitectureAuditText();
+        }
+
+        if ("function audit".equals(cmd) || "audit map".equals(cmd) || "function map".equals(cmd)) {
+            return buildQesFunctionAuditMapText();
+        }
+
+        if ("risk map".equals(cmd) || "audit risk".equals(cmd) || "risks".equals(cmd)) {
+            return buildQesRiskMapText();
+        }
+
+        if ("next architecture steps".equals(cmd) || "next steps".equals(cmd) || "roadmap next".equals(cmd)) {
+            return buildQesNextArchitectureStepsText();
         }
 
         if ("seed vault".equals(cmd) || "seed vault status".equals(cmd) || "seed status".equals(cmd)) {
@@ -1796,6 +1839,139 @@ public class MainActivity extends Activity {
         return "QES VAULT LOCK POLICY\n\n"
                 + "Finální model: PIN + pravá fráze + Argon2id + Android Keystore + AEAD Seed Vault.\n"
                 + "Skeleton teď pouze drží stav LOCKED/UNLOCKED pro budoucí citlivé příkazy.";
+    }
+
+
+    private String buildQesArchitectureAuditText() {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("QES ARCHITECTURE AUDIT BASELINE\n");
+        sb.append("ÚČEL: pevný kontrolní bod architektury před dalšími funkcemi.\n\n");
+
+        sb.append("VERSION\n");
+        sb.append("APP_VERSION: ").append(appVersion).append("\n");
+        sb.append("PATCH: ").append(patchVersion).append("\n\n");
+
+        sb.append("VAULT STATE\n");
+        sb.append("VAULT_LOCK: ").append(vaultUnlocked ? "UNLOCKED" : "LOCKED").append("\n");
+        sb.append("VAULT_MODE: ").append(vaultLockMode).append("\n");
+        sb.append("SEED_VAULT_SKELETON: ").append(seedVaultSkeletonReady ? "READY" : "NOT_READY").append("\n\n");
+
+        sb.append("IMPLEMENTED / PRESENT MODULES\n");
+        sb.append("- Android UI shell\n");
+        sb.append("- Rust JNI core bridge\n");
+        sb.append("- Text/File/Cover/Verify/Test/Log/MAC/Zero sections\n");
+        sb.append("- Stream native methods wiring\n");
+        sb.append("- QES_VERIFY_KEY report layer\n");
+        sb.append("- VAULT OS / Alcatraz console\n");
+        sb.append("- App Identity Seal\n");
+        sb.append("- Command Registry baseline\n");
+        sb.append("- Vault Lock skeleton\n");
+        sb.append("- AEAD Seed Vault skeleton\n");
+        sb.append("- Seed Vault buttons and handlers\n\n");
+
+        sb.append("PLANNED MODULES\n");
+        sb.append("- real Argon2id Vault Lock\n");
+        sb.append("- Android Keystore binding\n");
+        sb.append("- real AEAD Seed Records\n");
+        sb.append("- File Verifier\n");
+        sb.append("- Hidden Tag Capsule\n");
+        sb.append("- Exit Seal / Random Counterweight\n");
+        sb.append("- QES Glyph-State Cipher layer\n");
+        sb.append("- QES ARX/XOF overlay, 20 rounds\n");
+        sb.append("- Network Gate: OFF/ON + one allowed domain\n");
+        sb.append("- Design Engine: 10 presets + custom palette + zoom\n");
+        sb.append("- AI Inner Vault\n");
+        sb.append("- Secure Notes / Press Field Mode\n\n");
+
+        sb.append("AUDIT RESULT\n");
+        sb.append("Stav: BASELINE CREATED.\n");
+        sb.append("Doporučení: nepřidávat další velké moduly, dokud neprojde build a nebude ověřen runtime v APK.\n");
+
+        return sb.toString();
+    }
+
+    private String buildQesFunctionAuditMapText() {
+        return "QES FUNCTION AUDIT MAP\n\n"
+                + "UI / NAVIGATION\n"
+                + "- Přehled: základní stav aplikace\n"
+                + "- Klíč: vstupy pro heslo/seedy/particle\n"
+                + "- ART: ASCII/Glyph/visual carrier směr\n"
+                + "- TEXT: textové šifrování\n"
+                + "- SOUBOR: souborové šifrování + stream směr\n"
+                + "- COVER: cover/carrier směr\n"
+                + "- OVĚŘENÍ: verify/MAC/report směr\n"
+                + "- TESTY: selftest/roundtrip směr\n"
+                + "- LOG: interní log bez secret hodnot\n"
+                + "- ZERO LOCK: MAC/seal/report vrstva\n"
+                + "- VAULT OS: command runtime, AI split, audit\n\n"
+                + "SECURITY / VAULT\n"
+                + "- Identity Seal: APK_SHA256, APK_SHA256_X3, signing cert, release seal\n"
+                + "- Vault Lock: zatím skeleton LOCKED/UNLOCKED\n"
+                + "- Seed Vault: zatím skeleton formát ACTIVE/OLD/REVOKED\n"
+                + "- Command Registry: základ pro AI řízení\n\n"
+                + "CRYPTO ROADMAP\n"
+                + "- AEAD seed records\n"
+                + "- Dual Main Seed\n"
+                + "- random_file_seed capsule\n"
+                + "- hidden IV / route seed\n"
+                + "- XOF XOR pad\n"
+                + "- ARX + difuze + permutace\n"
+                + "- Hidden Tag Capsule\n"
+                + "- Outer MAC / Zero Lock\n\n"
+                + "AUDIT NOTE\n"
+                + "Tento audit mapuje funkce. Není to kryptografický audit bezpečnosti.";
+    }
+
+    private String buildQesRiskMapText() {
+        return "QES RISK MAP\n\n"
+                + "HIGH RISK\n"
+                + "- opakovaný XOR/XOF keystream\n"
+                + "- opakovaný AES-GCM nonce\n"
+                + "- ztracený random_file_seed\n"
+                + "- hardcoded seed v APK\n"
+                + "- logování PINu, fráze, seedu, hidden IV nebo route seed\n"
+                + "- AEAD tag ztracený nebo poškozený bez recovery\n"
+                + "- malware v kompromitovaném telefonu\n\n"
+                + "MEDIUM RISK\n"
+                + "- příliš mnoho vrstev bez testů\n"
+                + "- duplicitní UI tlačítka\n"
+                + "- nejasné rozdělení PUBLIC/VAULT/SENSITIVE příkazů\n"
+                + "- chybějící rollback ochrana\n"
+                + "- chybějící export/recovery Seed Vaultu\n\n"
+                + "LOW / MANAGEABLE RISK\n"
+                + "- compileSdk warning\n"
+                + "- design/zoom úpravy\n"
+                + "- statické audit texty\n\n"
+                + "MITIGATION PLAN\n"
+                + "1. držet Command Registry\n"
+                + "2. citlivé akce jen přes Vault Lock\n"
+                + "3. seedy jen jako AEAD records\n"
+                + "4. žádné secret hodnoty do logu\n"
+                + "5. testovat roundtrip, tamper, wrong key, rollback\n";
+    }
+
+    private String buildQesNextArchitectureStepsText() {
+        return "QES NEXT ARCHITECTURE STEPS\n\n"
+                + "NEJDŘÍV\n"
+                + "1. Ověřit zelený GitHub Actions build.\n"
+                + "2. Nainstalovat poslední APK.\n"
+                + "3. Ověřit VAULT OS obrazovku a audit tlačítka.\n"
+                + "4. Ověřit příkazy: architecture audit, function audit, risk map.\n\n"
+                + "PAK\n"
+                + "5. Vyčistit případné duplicitní tlačítko COMMANDS / AI MANIFEST.\n"
+                + "6. Přidat File Verifier skeleton.\n"
+                + "7. Přidat Design Engine skeleton: zoom + 10 presetů.\n"
+                + "8. Přidat Network Gate skeleton: OFF/ON + jedna doména.\n\n"
+                + "AŽ POTOM\n"
+                + "9. Real Argon2id + Keystore Vault Lock.\n"
+                + "10. Real AEAD Seed Vault.\n"
+                + "11. Hidden Tag Capsule.\n"
+                + "12. Exit Seal / Random Counterweight.\n"
+                + "13. QES Glyph-State Cipher.\n"
+                + "14. AI Inner Vault.\n\n"
+                + "ARCHITEKTONICKÉ PRAVIDLO\n"
+                + "Každý nový nápad nejdřív do roadmapy, potom malý patch, potom build, potom test.";
     }
 
     private String rustStatusQuiet() {
