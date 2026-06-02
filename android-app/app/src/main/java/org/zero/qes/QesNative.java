@@ -2,7 +2,7 @@ package org.zero.qes;
 
 public final class QesNative {
     static {
-        System.loadLibrary("qes_core");
+        System.loadLibrary("qes_quantum_encryption_system");
     }
 
     private QesNative() {}
