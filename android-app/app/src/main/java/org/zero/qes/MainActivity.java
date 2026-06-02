@@ -73,6 +73,9 @@ public class MainActivity extends Activity {
     private EditText verifyExpectedHash;
     private EditText verifyExpectedMac;
     private EditText logBox;
+    private EditText vaultTerminal;
+    private EditText vaultAiInput;
+    private EditText vaultAiChat;
     private EditText vaultInput;
     private EditText vaultOutput;
 
@@ -104,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.3-alpha";
-    private final String patchVersion = "P-2026-06-02-09-QES-VAULT-CONSOLE";
+    private final String appVersion = "0.13.4-alpha";
+    private final String patchVersion = "P-2026-06-02-09-QES-VAULT-OS-ALCATRAZ-AI";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -426,7 +429,7 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private String yesNo(boolean value) {
+    private String on(boolean value) {
         return value ? "ZAPNUTO" : "VYPNUTO";
     }
 
@@ -499,7 +502,7 @@ public class MainActivity extends Activity {
         r3.addView(navButton("NASTAVENÍ", "zero"));
 
         LinearLayout r4 = row();
-        r4.addView(navButton("VAULT", "vault"));
+        r4.addView(navButton("VAULT OS", "vault"));
 
         box.addView(r1);
         box.addView(r2);
@@ -549,7 +552,7 @@ public class MainActivity extends Activity {
         else if ("arch".equals(currentPage)) showArchitecture();
         else if ("log".equals(currentPage)) showLog();
         else if ("mac".equals(currentPage)) showMac();
-        else if ("vault".equals(currentPage)) showVaultConsole();
+        else if ("vault".equals(currentPage)) showVaultOsAlcatraz();
         else if ("zero".equals(currentPage)) showZero();
         else showOverview();
     }
@@ -563,6 +566,9 @@ public class MainActivity extends Activity {
         verifyExpectedHash = null;
         verifyExpectedMac = null;
         logBox = null;
+        vaultTerminal = null;
+        vaultAiInput = null;
+        vaultAiChat = null;
         vaultInput = null;
         vaultOutput = null;
     }
@@ -649,7 +655,7 @@ public class MainActivity extends Activity {
         addCompactKeyPanel();
 
         controlTable("STREAM STATUS", new String[][]{
-                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Stream Guard", on(streamGuardEnabled)},
                 {"Velikost bloku", streamBlockProfile},
                 {"Engine", streamEngineStatus},
                 {"RAM režim", performanceMode},
@@ -695,11 +701,11 @@ public class MainActivity extends Activity {
         addCompactKeyPanel();
 
         controlTable("COVER STREAM STATUS", new String[][]{
-                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Stream Guard", on(streamGuardEnabled)},
                 {"Velikost bloku", streamBlockProfile},
                 {"Cover režim", "PAYLOAD + KAPSLE"},
-                {"ZERO LOCK", yesNo(zeroLockEnabled)},
-                {"Final Seal", yesNo(finalSealEnabled)}
+                {"ZERO LOCK", on(zeroLockEnabled)},
+                {"Final Seal", on(finalSealEnabled)}
         });
 
         card("Cover carrier",
@@ -760,11 +766,11 @@ public class MainActivity extends Activity {
         section("DIAGNOSTIKA / TESTY");
 
         controlTable("TEST LIMITS", new String[][]{
-                {"Device Guard", yesNo(deviceGuardEnabled)},
+                {"Device Guard", on(deviceGuardEnabled)},
                 {"Performance", performanceMode},
                 {"Max test", String.valueOf(maxHeavyTestBytes) + " B"},
                 {"Stream block", streamBlockProfile},
-                {"Operace běží", yesNo(operationRunning)}
+                {"Operace běží", on(operationRunning)}
         });
         LinearLayout r1 = row();
         r1.addView(action("SPUSTIT TESTY", v -> runDiagnostics()));
@@ -830,15 +836,15 @@ public class MainActivity extends Activity {
         section("MAC / ZERO LOCK / FINAL SEAL");
 
         controlTable("ZERO LOCK STATUS", new String[][]{
-                {"ZERO LOCK", yesNo(zeroLockEnabled)},
-                {"Final Seal", yesNo(finalSealEnabled)},
-                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"ZERO LOCK", on(zeroLockEnabled)},
+                {"Final Seal", on(finalSealEnabled)},
+                {"Stream Guard", on(streamGuardEnabled)},
                 {"Blok", streamBlockProfile},
-                {"Payload Lock", yesNo(payloadLockEnabled)},
-                {"Capsule Binding", yesNo(capsuleBindingEnabled)},
-                {"Mode Binding", yesNo(modeBindingEnabled)},
-                {"Version Binding", yesNo(versionBindingEnabled)},
-                {"Tamper Detection", yesNo(zeroLockTamperDetection)},
+                {"Payload Lock", on(payloadLockEnabled)},
+                {"Capsule Binding", on(capsuleBindingEnabled)},
+                {"Mode Binding", on(modeBindingEnabled)},
+                {"Version Binding", on(versionBindingEnabled)},
+                {"Tamper Detection", on(zeroLockTamperDetection)},
                 {"Profile", zeroLockProfile}
         });
 
@@ -965,11 +971,11 @@ public class MainActivity extends Activity {
         content.addView(action("KOMPRESNÍ PROFIL", v -> cycleCompression()));
 
         controlTable("APP SHIELD / SANDBOX", new String[][]{
-                {"App Shield", yesNo(appShieldEnabled)},
+                {"App Shield", on(appShieldEnabled)},
                 {"Internet permission", noInternetMode ? "VYPNUTO" : "POVOLENO"},
                 {"Cleartext traffic", "ZAKÁZÁNO"},
                 {"Telemetry", noTelemetryMode ? "VYPNUTO" : "POVOLENO"},
-                {"Secure screen", yesNo(secureScreenEnabled)},
+                {"Secure screen", on(secureScreenEnabled)},
                 {"Secret logging", noSecretLogging ? "ZAKÁZÁNO" : "POVOLENO"},
                 {"Clipboard timeout", clearClipboardPlanned ? "PŘIPRAVENO" : "VYPNUTO"},
                 {"Lock on background", lockOnBackgroundPlanned ? "PŘIPRAVENO" : "VYPNUTO"}
@@ -981,12 +987,12 @@ public class MainActivity extends Activity {
         content.addView(shieldRow);
 
         controlTable("SIDE-CHANNEL GUARD", new String[][]{
-                {"Side-Channel Guard", yesNo(sideChannelGuardEnabled)},
-                {"Constant-time compare", yesNo(constantTimeCompareEnabled)},
+                {"Side-Channel Guard", on(sideChannelGuardEnabled)},
+                {"Constant-time compare", on(constantTimeCompareEnabled)},
                 {"Secret progress", secretDependentProgressBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
                 {"Secret logging", secretDependentLoggingBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
                 {"Early-exit MAC", earlyExitMacBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
-                {"Hardened execution", yesNo(hardenedExecutionMode)}
+                {"Hardened execution", on(hardenedExecutionMode)}
         });
 
         LinearLayout sideRow1 = row();
@@ -1002,11 +1008,11 @@ public class MainActivity extends Activity {
         content.addView(action("APP SHIELD POLICY", v -> showInfoDialog("QES App Shield", appShieldPolicyText())));
 
         controlTable("STREAM GUARD / BLOCK ENGINE", new String[][]{
-                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"Stream Guard", on(streamGuardEnabled)},
                 {"Souborový stream", streamFileModePlanned ? "PŘIPRAVENO" : "VYPNUTO"},
                 {"Velikost bloku", streamBlockProfile},
                 {"Block bytes", String.valueOf(streamBlockSizeBytes)},
-                {"Progress podle bloků", yesNo(streamProgressByPublicBlocks)},
+                {"Progress podle bloků", on(streamProgressByPublicBlocks)},
                 {"Secret timing", streamSecretTimingBlocked ? "ZAKÁZÁNO" : "POVOLENO"},
                 {"Engine", streamEngineStatus}
         });
@@ -1022,11 +1028,11 @@ public class MainActivity extends Activity {
         content.addView(streamRow2);
 
         controlTable("OCHRANA ZAŘÍZENÍ", new String[][]{
-                {"Device Guard", yesNo(deviceGuardEnabled)},
+                {"Device Guard", on(deviceGuardEnabled)},
                 {"Režim výkonu", performanceMode},
                 {"Max test", String.valueOf(maxHeavyTestBytes) + " B"},
                 {"Max čas", String.valueOf(maxHeavyTestSeconds) + " s"},
-                {"Operace běží", yesNo(operationRunning)}
+                {"Operace běží", on(operationRunning)}
         });
 
         LinearLayout guardRow = row();
@@ -1173,24 +1179,24 @@ public class MainActivity extends Activity {
 
         if ("security status".equals(cmd) || "security".equals(cmd) || "status".equals(cmd)) {
             return "QES SECURITY STATUS\n"
-                    + "APP_SHIELD: " + yesNo(appShieldEnabled) + "\n"
-                    + "SECURE_SCREEN: " + yesNo(secureScreenEnabled) + "\n"
-                    + "NO_INTERNET_MODE: " + yesNo(noInternetMode) + "\n"
-                    + "NO_TELEMETRY: " + yesNo(noTelemetryMode) + "\n"
-                    + "NO_SECRET_LOGGING: " + yesNo(noSecretLogging) + "\n"
-                    + "SIDE_CHANNEL_GUARD: " + yesNo(sideChannelGuardEnabled) + "\n"
-                    + "CONSTANT_TIME_COMPARE: " + yesNo(constantTimeCompareEnabled) + "\n"
-                    + "SECRET_PROGRESS_BLOCKED: " + yesNo(secretDependentProgressBlocked) + "\n"
-                    + "SECRET_LOGGING_BLOCKED: " + yesNo(secretDependentLoggingBlocked) + "\n"
-                    + "EARLY_EXIT_MAC_BLOCKED: " + yesNo(earlyExitMacBlocked) + "\n"
-                    + "ZERO_LOCK: " + yesNo(zeroLockEnabled) + "\n"
-                    + "FINAL_SEAL: " + yesNo(finalSealEnabled) + "\n"
-                    + "PAYLOAD_LOCK: " + yesNo(payloadLockEnabled) + "\n"
-                    + "CAPSULE_BINDING: " + yesNo(capsuleBindingEnabled) + "\n"
-                    + "MODE_BINDING: " + yesNo(modeBindingEnabled) + "\n"
-                    + "VERSION_BINDING: " + yesNo(versionBindingEnabled) + "\n"
-                    + "STREAM_GUARD: " + yesNo(streamGuardEnabled) + "\n"
-                    + "DEVICE_GUARD: " + yesNo(deviceGuardEnabled);
+                    + "APP_SHIELD: " + on(appShieldEnabled) + "\n"
+                    + "SECURE_SCREEN: " + on(secureScreenEnabled) + "\n"
+                    + "NO_INTERNET_MODE: " + on(noInternetMode) + "\n"
+                    + "NO_TELEMETRY: " + on(noTelemetryMode) + "\n"
+                    + "NO_SECRET_LOGGING: " + on(noSecretLogging) + "\n"
+                    + "SIDE_CHANNEL_GUARD: " + on(sideChannelGuardEnabled) + "\n"
+                    + "CONSTANT_TIME_COMPARE: " + on(constantTimeCompareEnabled) + "\n"
+                    + "SECRET_PROGRESS_BLOCKED: " + on(secretDependentProgressBlocked) + "\n"
+                    + "SECRET_LOGGING_BLOCKED: " + on(secretDependentLoggingBlocked) + "\n"
+                    + "EARLY_EXIT_MAC_BLOCKED: " + on(earlyExitMacBlocked) + "\n"
+                    + "ZERO_LOCK: " + on(zeroLockEnabled) + "\n"
+                    + "FINAL_SEAL: " + on(finalSealEnabled) + "\n"
+                    + "PAYLOAD_LOCK: " + on(payloadLockEnabled) + "\n"
+                    + "CAPSULE_BINDING: " + on(capsuleBindingEnabled) + "\n"
+                    + "MODE_BINDING: " + on(modeBindingEnabled) + "\n"
+                    + "VERSION_BINDING: " + on(versionBindingEnabled) + "\n"
+                    + "STREAM_GUARD: " + on(streamGuardEnabled) + "\n"
+                    + "DEVICE_GUARD: " + on(deviceGuardEnabled);
         }
 
         if ("show report".equals(cmd) || "report".equals(cmd)) {
@@ -1240,6 +1246,245 @@ public class MainActivity extends Activity {
     }
 
     private String extractReportLine(String key) {
+        if (lastReport == null) return null;
+        String prefix = key + ":";
+        String[] lines = lastReport.split("\\R");
+        for (String line : lines) {
+            if (line != null && line.trim().startsWith(prefix)) return line.trim();
+        }
+        return null;
+    }
+
+
+    private void showVaultOsAlcatraz() {
+        clear();
+        currentPage = "vault";
+        section("QES VAULT OS / ALCATRAZ");
+
+        card("Virtuální prostředí uvnitř aplikace",
+                "Toto není bootovaný operační systém ani otevřený Linux shell. Je to pevně uzavřené QES virtuální prostředí: příkazový runtime, interní API a AI řádka. AI může navrhnout příkaz do terminálu, ale uživatel ho musí potvrdit tlačítkem RUN.");
+
+        controlTable("ALCATRAZ HRANICE", new String[][]{
+                {"REAL SHELL", "ZAKÁZÁNO"},
+                {"SYSTÉMOVÉ PŘÍKAZY", "ZAKÁZÁNO"},
+                {"FILESYSTEM DIRECT", "ZAKÁZÁNO"},
+                {"NETWORK/API", "JEN PLÁNOVANÝ KONEKTOR"},
+                {"QES INTERNAL API", "POVOLENO"},
+                {"USER CONFIRM", "POVINNÉ"}
+        });
+
+        vaultAiInput = field("AI řádka – napiš, co chceš udělat", false, "ukaž security status");
+        vaultInput = field("Terminál – povolený QES příkaz", false, "help");
+
+        LinearLayout split = row();
+        vaultAiChat = area("AI CHAT / návrhy příkazů");
+        vaultTerminal = area("QES TERMINÁL / výstup");
+        vaultAiChat.setMinLines(11);
+        vaultTerminal.setMinLines(11);
+        vaultAiChat.setText("QES-AI: Jsem uzavřený operátor Vault OS. Nepíšu do systému, jen navrhuji povolené QES příkazy.\nNapiš požadavek a stiskni AI → TERMINÁL.");
+        vaultTerminal.setText(executeVaultOsCommand("help", false));
+        split.addView(vaultAiChat);
+        split.addView(vaultTerminal);
+
+        LinearLayout r1 = row();
+        r1.addView(action("AI → TERMINÁL", v -> aiToVaultTerminal()));
+        r1.addView(action("RUN", v -> runVaultOsCommand()));
+        content.addView(vaultAiInput);
+        content.addView(vaultInput);
+        content.addView(r1);
+
+        LinearLayout r2 = row();
+        r2.addView(action("SECURITY", v -> setVaultCommandAndRun("security status")));
+        r2.addView(action("VERIFY KEY", v -> setVaultCommandAndRun("show verify_key")));
+        content.addView(r2);
+
+        LinearLayout r3 = row();
+        r3.addView(action("API HELP", v -> setVaultCommandAndRun("api help")));
+        r3.addView(action("SELFTEST", v -> setVaultCommandAndRun("selftest")));
+        content.addView(r3);
+
+        LinearLayout r4 = row();
+        r4.addView(action("REPORT", v -> setVaultCommandAndRun("show report")));
+        r4.addView(action("CLEAR", v -> setVaultCommandAndRun("clear log")));
+        content.addView(r4);
+
+        content.addView(split);
+    }
+
+    private void aiToVaultTerminal() {
+        String request = vaultAiInput == null ? "" : vaultAiInput.getText().toString();
+        String proposed = proposeVaultCommand(request);
+        if (vaultInput != null) vaultInput.setText(proposed);
+        String msg = "\n\nUŽIVATEL: " + request + "\nQES-AI: Navrhuji příkaz do terminálu:\n> " + proposed + "\nPotvrď ho tlačítkem RUN.";
+        if (vaultAiChat != null) vaultAiChat.append(msg);
+        addLog("Vault AI navrhla příkaz: " + proposed);
+        status.setText("AI vložila návrh do terminálu. Potvrď RUN.");
+    }
+
+    private String proposeVaultCommand(String request) {
+        String q = request == null ? "" : request.toLowerCase(Locale.ROOT);
+        if (q.contains("verify") || q.contains("ověř") || q.contains("klic") || q.contains("klíč")) return "show verify_key";
+        if (q.contains("report") || q.contains("mac") || q.contains("seal") || q.contains("peče")) return "show report";
+        if (q.contains("security") || q.contains("bezpe") || q.contains("alcatraz") || q.contains("stav")) return "security status";
+        if (q.contains("api") || q.contains("endpoint")) return "api help";
+        if (q.contains("test") || q.contains("self")) return "selftest";
+        if (q.contains("info") || q.contains("verz") || q.contains("patch")) return "app info";
+        if (q.contains("export") || q.contains("ulož") || q.contains("uloz")) return "export report";
+        if (q.contains("clear") || q.contains("vyčisti") || q.contains("vycisti")) return "clear log";
+        return "help";
+    }
+
+    private void runVaultOsCommand() {
+        String cmd = vaultInput == null ? "" : vaultInput.getText().toString();
+        String result = executeVaultOsCommand(cmd, true);
+        if (vaultTerminal != null) vaultTerminal.setText(result);
+    }
+
+    private void setVaultCommandAndRun(String cmd) {
+        if (vaultInput != null) vaultInput.setText(cmd);
+        String result = executeVaultOsCommand(cmd, true);
+        if (vaultTerminal != null) vaultTerminal.setText(result);
+    }
+
+    private String executeVaultOsCommand(String rawCommand, boolean mutate) {
+        String cmd = rawCommand == null ? "" : rawCommand.trim().toLowerCase(Locale.ROOT);
+        if (cmd.isEmpty()) cmd = "help";
+        if (mutate) addLog("Vault OS command: " + cmd);
+
+        if (isBlockedVaultCommand(cmd)) {
+            return "ALCATRAZ ODMÍTL PŘÍKAZ\n"
+                    + "Příkaz: " + rawCommand + "\n\n"
+                    + "Toto není Linux shell. Vault OS smí volat jen QES interní API a whitelist příkazy.\n"
+                    + "Zadej: help nebo api help";
+        }
+
+        if ("help".equals(cmd)) {
+            return "QES VAULT OS / POVOLENÉ PŘÍKAZY\n"
+                    + "help                 - seznam příkazů\n"
+                    + "app info             - verze, patch, runtime\n"
+                    + "security status      - ochrany Alcatraz/Vault\n"
+                    + "show report          - poslední MAC/security report\n"
+                    + "show verify_key      - poslední QES_VERIFY_KEY\n"
+                    + "selftest             - Rust/JNI self test\n"
+                    + "clear log            - vyčistí interní log\n"
+                    + "export report        - uloží poslední report\n"
+                    + "api help             - interní QES API\n"
+                    + "api list             - seznam endpointů\n"
+                    + "api call qes://app/info\n"
+                    + "api call qes://security/status\n"
+                    + "api call qes://report/show\n"
+                    + "api call qes://verify/key\n"
+                    + "api call qes://selftest/run\n\n"
+                    + "AI workflow: napiš požadavek vlevo -> AI → TERMINÁL -> RUN.";
+        }
+
+        if ("api help".equals(cmd)) {
+            return "QES INTERNAL API / BEZPEČNÝ KONEKTOR\n"
+                    + "API není otevřený systémový shell. Endpointy jsou jen interní qes:// volání.\n"
+                    + "Externí http/https API je zatím blokované, aby se do logu ani sítě neposlaly tokeny.\n\n"
+                    + "Použití:\n"
+                    + "api list\n"
+                    + "api call qes://app/info\n"
+                    + "api call qes://security/status\n"
+                    + "api call qes://report/show\n"
+                    + "api call qes://verify/key\n"
+                    + "api call qes://selftest/run";
+        }
+
+        if ("api list".equals(cmd)) {
+            return "QES API ENDPOINTS\n"
+                    + "qes://app/info\n"
+                    + "qes://security/status\n"
+                    + "qes://report/show\n"
+                    + "qes://verify/key\n"
+                    + "qes://selftest/run";
+        }
+
+        if (cmd.startsWith("api call ")) {
+            String endpoint = cmd.substring("api call ".length()).trim();
+            if ("qes://app/info".equals(endpoint)) return executeVaultOsCommand("app info", false);
+            if ("qes://security/status".equals(endpoint)) return executeVaultOsCommand("security status", false);
+            if ("qes://report/show".equals(endpoint)) return executeVaultOsCommand("show report", false);
+            if ("qes://verify/key".equals(endpoint)) return executeVaultOsCommand("show verify_key", false);
+            if ("qes://selftest/run".equals(endpoint)) return executeVaultOsCommand("selftest", false);
+            return "API FAIL: endpoint není povolený v Alcatraz whitelistu: " + endpoint;
+        }
+
+        if ("app info".equals(cmd) || "appinfo".equals(cmd) || "info".equals(cmd)) {
+            return "QES APP INFO\n"
+                    + "APP_VERSION: " + appVersion + "\n"
+                    + "PATCH: " + patchVersion + "\n"
+                    + "BUILD_STAGE: " + buildStage + "\n"
+                    + "RUNTIME: VAULT OS / ALCATRAZ\n"
+                    + "APP_MODE: " + appMode + "\n"
+                    + "CRYPTO_PROFILE: " + cryptoProfile + "\n"
+                    + "STREAM_ENGINE: " + streamEngineStatus + "\n"
+                    + "JNI: " + rustStatusQuiet();
+        }
+
+        if ("security status".equals(cmd) || "security".equals(cmd) || "status".equals(cmd)) {
+            return "QES ALCATRAZ SECURITY STATUS\n"
+                    + "REAL_SHELL: BLOCKED\n"
+                    + "SYSTEM_COMMANDS: BLOCKED\n"
+                    + "DIRECT_FILESYSTEM: BLOCKED\n"
+                    + "EXTERNAL_NETWORK_API: BLOCKED_IN_THIS_PATCH\n"
+                    + "USER_CONFIRM_RUN: REQUIRED\n"
+                    + "APP_SHIELD: " + on(appShieldEnabled) + "\n"
+                    + "SECURE_SCREEN: " + on(secureScreenEnabled) + "\n"
+                    + "NO_INTERNET_MODE: " + on(noInternetMode) + "\n"
+                    + "NO_TELEMETRY: " + on(noTelemetryMode) + "\n"
+                    + "NO_SECRET_LOGGING: " + on(noSecretLogging) + "\n"
+                    + "SIDE_CHANNEL_GUARD: " + on(sideChannelGuardEnabled) + "\n"
+                    + "ZERO_LOCK: " + on(zeroLockEnabled) + "\n"
+                    + "FINAL_SEAL: " + on(finalSealEnabled) + "\n"
+                    + "STREAM_GUARD: " + on(streamGuardEnabled) + "\n"
+                    + "DEVICE_GUARD: " + on(deviceGuardEnabled);
+        }
+
+        if ("show report".equals(cmd) || "report".equals(cmd)) {
+            if (lastReport == null || lastReport.isEmpty()) return "REPORT: zatím není vytvořen žádný MAC/security report.";
+            return lastReport;
+        }
+
+        if ("show verify_key".equals(cmd) || "verify_key".equals(cmd) || "show verify key".equals(cmd)) {
+            String line = extractVaultReportLine("QES_VERIFY_KEY");
+            return line == null ? "QES_VERIFY_KEY: zatím není v reportu." : line;
+        }
+
+        if ("selftest".equals(cmd) || "self test".equals(cmd)) {
+            try {
+                String result = QesNative.selfTest();
+                return "QES SELFTEST\nJNI: OK\nRUST_SELF_TEST: " + (result == null || result.isEmpty() ? "OK" : result);
+            } catch (Throwable e) {
+                return "QES SELFTEST\nJNI/RUST: FAIL\nERROR: " + (e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+        }
+
+        if ("clear log".equals(cmd) || "clearlog".equals(cmd)) {
+            if (mutate) clearLog();
+            return "LOG: vyčištěn.";
+        }
+
+        if ("export report".equals(cmd) || "save report".equals(cmd)) {
+            if (lastReport == null || lastReport.isEmpty()) return "EXPORT REPORT: nelze uložit, report zatím neexistuje.";
+            if (mutate) saveReport();
+            return "EXPORT REPORT: otevřen Android dialog pro uložení qes_mac_report.txt.";
+        }
+
+        return "Neznámý příkaz ve Vault OS: " + rawCommand + "\nZadej: help";
+    }
+
+    private boolean isBlockedVaultCommand(String cmd) {
+        if (cmd == null) return true;
+        String c = cmd.trim().toLowerCase(Locale.ROOT);
+        return c.startsWith("cd") || c.startsWith("ls") || c.startsWith("cat") || c.startsWith("rm") ||
+                c.startsWith("mv") || c.startsWith("cp") || c.startsWith("sh") || c.startsWith("bash") ||
+                c.startsWith("su") || c.startsWith("pkg") || c.startsWith("apt") || c.startsWith("git") ||
+                c.startsWith("curl") || c.startsWith("wget") || c.startsWith("python") || c.startsWith("java") ||
+                c.startsWith("http://") || c.startsWith("https://") || c.startsWith("file://") || c.startsWith("content://");
+    }
+
+    private String extractVaultReportLine(String key) {
         if (lastReport == null) return null;
         String prefix = key + ":";
         String[] lines = lastReport.split("\\R");
@@ -1374,12 +1619,12 @@ public class MainActivity extends Activity {
                 {"Password", passwordState},
                 {"Seedů", seedState},
                 {"ART profil", artProfile},
-                {"ART navigace", yesNo(artAsNavigation)},
-                {"MAC / TAG", yesNo(requireMac)},
-                {"Kapsle", yesNo(outputCapsule)},
-                {"ZERO LOCK", yesNo(zeroLockEnabled)},
-                {"Final Seal", yesNo(finalSealEnabled)},
-                {"Stream Guard", yesNo(streamGuardEnabled)},
+                {"ART navigace", on(artAsNavigation)},
+                {"MAC / TAG", on(requireMac)},
+                {"Kapsle", on(outputCapsule)},
+                {"ZERO LOCK", on(zeroLockEnabled)},
+                {"Final Seal", on(finalSealEnabled)},
+                {"Stream Guard", on(streamGuardEnabled)},
                 {"Blok", streamBlockProfile},
                 {"Kryptografický profil", cryptoProfile}
         });
@@ -1663,7 +1908,7 @@ public class MainActivity extends Activity {
                         "\nQES_VERIFY_MAC: " + finalMacHex +
                         "\nPUBLIC_SHA256: " + publicHashHex +
                         "\nSTREAM_MAC: " + finalMacHex +
-                        "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
+                        "\nZERO_LOCK: " + on(zeroLockEnabled) +
                         "\nFINAL_SEAL: " + zeroLockMacHex("FILE-STREAM", concat(publicHash, finalMac)) +
                         "\nSTREAM_ENGINE: NORMAL_QES_BLOCKS_V1";
 
@@ -2427,16 +2672,16 @@ public class MainActivity extends Activity {
                 "\nPUBLIC_SHA256: " + publicHash +
                 "\nKEYED_MAC: " + mac +
                 "\nCAPSULE_128_SHA256: " + sha256(lastCapsule128) +
-                "\nZERO_LOCK: " + yesNo(zeroLockEnabled) +
+                "\nZERO_LOCK: " + on(zeroLockEnabled) +
                 "\nZERO_LOCK_PROFILE: " + zeroLockProfile +
                 "\nFINAL_SEAL: " + zeroLockSeal +
-                "\nPAYLOAD_LOCK: " + yesNo(payloadLockEnabled) +
-                "\nCAPSULE_BINDING: " + yesNo(capsuleBindingEnabled) +
-                "\nMODE_BINDING: " + yesNo(modeBindingEnabled) +
-                "\nVERSION_BINDING: " + yesNo(versionBindingEnabled) +
-                "\nTAMPER_DETECTION: " + yesNo(zeroLockTamperDetection);
+                "\nPAYLOAD_LOCK: " + on(payloadLockEnabled) +
+                "\nCAPSULE_BINDING: " + on(capsuleBindingEnabled) +
+                "\nMODE_BINDING: " + on(modeBindingEnabled) +
+                "\nVERSION_BINDING: " + on(versionBindingEnabled) +
+                "\nTAMPER_DETECTION: " + on(zeroLockTamperDetection);
 
-        addLog("Security report created: mode=" + mode + ", sha256=" + publicHash + ", zeroLock=" + yesNo(zeroLockEnabled));
+        addLog("Security report created: mode=" + mode + ", sha256=" + publicHash + ", zeroLock=" + on(zeroLockEnabled));
     }
 
 
@@ -3041,12 +3286,12 @@ public class MainActivity extends Activity {
     }
 
     private String streamStatusText() {
-        return "Stream Guard: " + yesNo(streamGuardEnabled) +
+        return "Stream Guard: " + on(streamGuardEnabled) +
                 "\nStream file mode: " + (streamFileModePlanned ? "PŘIPRAVENO" : "VYPNUTO") +
                 "\nBlok: " + streamBlockProfile +
                 "\nBlok bajtů: " + streamBlockSizeBytes +
-                "\nProgress podle bloků: " + yesNo(streamProgressByPublicBlocks) +
-                "\nSecret timing blocked: " + yesNo(streamSecretTimingBlocked) +
+                "\nProgress podle bloků: " + on(streamProgressByPublicBlocks) +
+                "\nSecret timing blocked: " + on(streamSecretTimingBlocked) +
                 "\nEngine: " + streamEngineStatus;
     }
 
@@ -3073,13 +3318,13 @@ public class MainActivity extends Activity {
     }
 
     private String zeroLockStateText() {
-        return "ZERO LOCK: " + yesNo(zeroLockEnabled) +
-                "\nFinal Seal: " + yesNo(finalSealEnabled) +
-                "\nPayload Lock: " + yesNo(payloadLockEnabled) +
-                "\nCapsule Binding: " + yesNo(capsuleBindingEnabled) +
-                "\nMode Binding: " + yesNo(modeBindingEnabled) +
-                "\nVersion Binding: " + yesNo(versionBindingEnabled) +
-                "\nTamper Detection: " + yesNo(zeroLockTamperDetection) +
+        return "ZERO LOCK: " + on(zeroLockEnabled) +
+                "\nFinal Seal: " + on(finalSealEnabled) +
+                "\nPayload Lock: " + on(payloadLockEnabled) +
+                "\nCapsule Binding: " + on(capsuleBindingEnabled) +
+                "\nMode Binding: " + on(modeBindingEnabled) +
+                "\nVersion Binding: " + on(versionBindingEnabled) +
+                "\nTamper Detection: " + on(zeroLockTamperDetection) +
                 "\nProfile: " + zeroLockProfile;
     }
 
