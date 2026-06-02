@@ -107,8 +107,17 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.8b-alpha";
-    private final String patchVersion = "P-2026-06-02-12B-QES-SEED-VAULT-BUTTON-FIX";
+    private final String appVersion = "0.13.8c-alpha";
+    private final String patchVersion = "P-2026-06-02-12C-QES-VAULT-STATE-BUILD-FIX";
+    private boolean vaultUnlocked = false;
+    private long vaultUnlockedAtMs = 0L;
+    private String vaultLockMode = "LOCKED";
+    private boolean seedVaultSkeletonReady = true;
+    private int seedVaultActiveRecords = 0;
+    private int seedVaultOldRecords = 0;
+    private int seedVaultRevokedRecords = 0;
+
+
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1768,6 +1777,25 @@ public class MainActivity extends Activity {
                 + "Nové soubory používají ACTIVE.\n"
                 + "Staré soubory se otevírají přes seed_id / seed_version.\n"
                 + "Podezřelý seed bude REVOKED.";
+    }
+
+
+    private String buildQesVaultStatusText() {
+        long ageSec = vaultUnlocked && vaultUnlockedAtMs > 0L
+                ? Math.max(0L, (System.currentTimeMillis() - vaultUnlockedAtMs) / 1000L)
+                : 0L;
+
+        return "QES VAULT LOCK STATUS\n"
+                + "STATE: " + (vaultUnlocked ? "UNLOCKED" : "LOCKED") + "\n"
+                + "MODE: " + vaultLockMode + "\n"
+                + "UNLOCK_AGE_SECONDS: " + ageSec + "\n"
+                + "PATCH: " + patchVersion;
+    }
+
+    private String buildQesVaultLockPolicyText() {
+        return "QES VAULT LOCK POLICY\n\n"
+                + "Finální model: PIN + pravá fráze + Argon2id + Android Keystore + AEAD Seed Vault.\n"
+                + "Skeleton teď pouze drží stav LOCKED/UNLOCKED pro budoucí citlivé příkazy.";
     }
 
     private String rustStatusQuiet() {
