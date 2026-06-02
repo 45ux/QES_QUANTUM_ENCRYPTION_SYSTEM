@@ -73,6 +73,8 @@ public class MainActivity extends Activity {
     private EditText verifyExpectedHash;
     private EditText verifyExpectedMac;
     private EditText logBox;
+    private EditText vaultInput;
+    private EditText vaultOutput;
 
     private Uri secretUri;
     private Uri qesUri;
@@ -102,8 +104,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.2-alpha";
-    private final String patchVersion = "P-2026-06-02-08-QES-VERIFY-KEY";
+    private final String appVersion = "0.13.3-alpha";
+    private final String patchVersion = "P-2026-06-02-09-QES-VAULT-CONSOLE";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -496,9 +498,13 @@ public class MainActivity extends Activity {
         r3.addView(navButton("ZERO LOCK", "mac"));
         r3.addView(navButton("NASTAVENÍ", "zero"));
 
+        LinearLayout r4 = row();
+        r4.addView(navButton("VAULT", "vault"));
+
         box.addView(r1);
         box.addView(r2);
         box.addView(r3);
+        box.addView(r4);
         return box;
     }
 
@@ -543,6 +549,7 @@ public class MainActivity extends Activity {
         else if ("arch".equals(currentPage)) showArchitecture();
         else if ("log".equals(currentPage)) showLog();
         else if ("mac".equals(currentPage)) showMac();
+        else if ("vault".equals(currentPage)) showVaultConsole();
         else if ("zero".equals(currentPage)) showZero();
         else showOverview();
     }
@@ -556,6 +563,8 @@ public class MainActivity extends Activity {
         verifyExpectedHash = null;
         verifyExpectedMac = null;
         logBox = null;
+        vaultInput = null;
+        vaultOutput = null;
     }
 
     private void showOverview() {
@@ -1052,6 +1061,192 @@ public class MainActivity extends Activity {
         resetRow2.addView(action("RESET MAC", v -> { lastReport = ""; lastCapsule128 = null; lastMode = "NONE"; refreshSettings("MAC reset"); }));
         resetRow2.addView(action("RESET NAVIGACE", v -> { pass = ""; baseSeed = "seed-main"; extraSeeds = ""; refreshSettings("Navigace reset"); }));
         content.addView(resetRow2);
+    }
+
+
+    private void showVaultConsole() {
+        clear();
+        currentPage = "vault";
+        section("QES VAULT CONSOLE");
+
+        card("Bezpečný interní terminál",
+                "Toto není Linux shell. QES Vault Console nespouští systémové příkazy. Používá jen povolený whitelist QES příkazů pro stav aplikace, report, verify key, self-test a export.");
+
+        controlTable("POVOLENÉ PŘÍKAZY", new String[][]{
+                {"help", "seznam příkazů"},
+                {"app info", "verze, patch, engine"},
+                {"security status", "stav ochran"},
+                {"show report", "poslední report"},
+                {"show verify_key", "QES_VERIFY_KEY"},
+                {"selftest", "Rust/JNI test"},
+                {"clear log", "vyčistit log"},
+                {"export report", "uložit report"}
+        });
+
+        vaultInput = field("Příkaz", false, "help");
+        vaultOutput = area("Vault console výstup");
+        vaultOutput.setText(executeVaultCommand("help", false));
+
+        content.addView(vaultInput);
+
+        LinearLayout r1 = row();
+        r1.addView(action("RUN", v -> runVaultCommand()));
+        r1.addView(action("HELP", v -> {
+            vaultInput.setText("help");
+            vaultOutput.setText(executeVaultCommand("help", true));
+        }));
+        content.addView(r1);
+
+        LinearLayout r2 = row();
+        r2.addView(action("VERIFY KEY", v -> {
+            vaultInput.setText("show verify_key");
+            vaultOutput.setText(executeVaultCommand("show verify_key", true));
+        }));
+        r2.addView(action("SECURITY", v -> {
+            vaultInput.setText("security status");
+            vaultOutput.setText(executeVaultCommand("security status", true));
+        }));
+        content.addView(r2);
+
+        LinearLayout r3 = row();
+        r3.addView(action("SELFTEST", v -> {
+            vaultInput.setText("selftest");
+            vaultOutput.setText(executeVaultCommand("selftest", true));
+        }));
+        r3.addView(action("EXPORT REPORT", v -> {
+            vaultInput.setText("export report");
+            vaultOutput.setText(executeVaultCommand("export report", true));
+        }));
+        content.addView(r3);
+
+        LinearLayout r4 = row();
+        r4.addView(action("CLEAR CONSOLE", v -> {
+            vaultOutput.setText("");
+            status.setText("Vault console vyčištěna.");
+        }));
+        r4.addView(action("CLEAR LOG", v -> {
+            vaultInput.setText("clear log");
+            vaultOutput.setText(executeVaultCommand("clear log", true));
+        }));
+        content.addView(r4);
+
+        content.addView(vaultOutput);
+    }
+
+    private void runVaultCommand() {
+        String cmd = vaultInput == null ? "" : vaultInput.getText().toString();
+        String result = executeVaultCommand(cmd, true);
+        if (vaultOutput != null) vaultOutput.setText(result);
+    }
+
+    private String executeVaultCommand(String rawCommand, boolean mutate) {
+        String cmd = rawCommand == null ? "" : rawCommand.trim().toLowerCase(Locale.ROOT);
+        if (cmd.isEmpty()) cmd = "help";
+        if (mutate) addLog("Vault command: " + cmd);
+
+        if ("help".equals(cmd)) {
+            return "QES VAULT CONSOLE / WHITELIST\n"
+                    + "help            - zobrazí povolené příkazy\n"
+                    + "app info        - verze, patch, build stage, engine\n"
+                    + "security status - App Shield / Side-Channel / Zero Lock / Stream Guard\n"
+                    + "show report     - poslední MAC/security report\n"
+                    + "show verify_key - vytáhne QES_VERIFY_KEY z reportu\n"
+                    + "selftest        - Rust/JNI self test\n"
+                    + "clear log       - vyčistí interní log aplikace\n"
+                    + "export report   - uloží poslední report\n\n"
+                    + "Zakázáno: shell, cd, ls, cat, rm, git, tokeny, hesla a systémové příkazy.";
+        }
+
+        if ("app info".equals(cmd) || "appinfo".equals(cmd) || "info".equals(cmd)) {
+            return "QES APP INFO\n"
+                    + "APP_VERSION: " + appVersion + "\n"
+                    + "PATCH: " + patchVersion + "\n"
+                    + "BUILD_STAGE: " + buildStage + "\n"
+                    + "APP_MODE: " + appMode + "\n"
+                    + "UI_MODE: " + uiMode + "\n"
+                    + "LANGUAGE: " + interfaceLanguage + "\n"
+                    + "CRYPTO_PROFILE: " + cryptoProfile + "\n"
+                    + "STREAM_ENGINE: " + streamEngineStatus + "\n"
+                    + "STREAM_BLOCK: " + streamBlockProfile + "\n"
+                    + "JNI: " + rustStatusQuiet();
+        }
+
+        if ("security status".equals(cmd) || "security".equals(cmd) || "status".equals(cmd)) {
+            return "QES SECURITY STATUS\n"
+                    + "APP_SHIELD: " + yesNo(appShieldEnabled) + "\n"
+                    + "SECURE_SCREEN: " + yesNo(secureScreenEnabled) + "\n"
+                    + "NO_INTERNET_MODE: " + yesNo(noInternetMode) + "\n"
+                    + "NO_TELEMETRY: " + yesNo(noTelemetryMode) + "\n"
+                    + "NO_SECRET_LOGGING: " + yesNo(noSecretLogging) + "\n"
+                    + "SIDE_CHANNEL_GUARD: " + yesNo(sideChannelGuardEnabled) + "\n"
+                    + "CONSTANT_TIME_COMPARE: " + yesNo(constantTimeCompareEnabled) + "\n"
+                    + "SECRET_PROGRESS_BLOCKED: " + yesNo(secretDependentProgressBlocked) + "\n"
+                    + "SECRET_LOGGING_BLOCKED: " + yesNo(secretDependentLoggingBlocked) + "\n"
+                    + "EARLY_EXIT_MAC_BLOCKED: " + yesNo(earlyExitMacBlocked) + "\n"
+                    + "ZERO_LOCK: " + yesNo(zeroLockEnabled) + "\n"
+                    + "FINAL_SEAL: " + yesNo(finalSealEnabled) + "\n"
+                    + "PAYLOAD_LOCK: " + yesNo(payloadLockEnabled) + "\n"
+                    + "CAPSULE_BINDING: " + yesNo(capsuleBindingEnabled) + "\n"
+                    + "MODE_BINDING: " + yesNo(modeBindingEnabled) + "\n"
+                    + "VERSION_BINDING: " + yesNo(versionBindingEnabled) + "\n"
+                    + "STREAM_GUARD: " + yesNo(streamGuardEnabled) + "\n"
+                    + "DEVICE_GUARD: " + yesNo(deviceGuardEnabled);
+        }
+
+        if ("show report".equals(cmd) || "report".equals(cmd)) {
+            if (lastReport == null || lastReport.isEmpty()) {
+                return "Zatím není vytvořen žádný QES security/MAC report. Nejdřív něco zašifruj nebo ověř.";
+            }
+            return lastReport;
+        }
+
+        if ("show verify_key".equals(cmd) || "verify_key".equals(cmd) || "show verify key".equals(cmd)) {
+            if (lastReport == null || lastReport.isEmpty()) {
+                return "QES_VERIFY_KEY zatím neexistuje. Nejdřív vytvoř MAC/security report.";
+            }
+            String line = extractReportLine("QES_VERIFY_KEY");
+            return line == null ? "QES_VERIFY_KEY nebyl v posledním reportu nalezen." : line;
+        }
+
+        if ("selftest".equals(cmd) || "self test".equals(cmd)) {
+            try {
+                String result = QesNative.selfTest();
+                return "QES SELFTEST\nJNI: OK\nRUST_SELF_TEST: " + (result == null || result.isEmpty() ? "OK" : result);
+            } catch (Throwable e) {
+                return "QES SELFTEST\nJNI/RUST: FAIL\nERROR: " + (e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+        }
+
+        if ("clear log".equals(cmd) || "clearlog".equals(cmd)) {
+            if (mutate) clearLog();
+            return "LOG: vyčištěn.";
+        }
+
+        if ("export report".equals(cmd) || "save report".equals(cmd)) {
+            if (lastReport == null || lastReport.isEmpty()) {
+                return "Nelze uložit report: zatím žádný neexistuje.";
+            }
+            if (mutate) saveReport();
+            return "EXPORT REPORT: otevřen Android dialog pro uložení qes_mac_report.txt.";
+        }
+
+        if (cmd.startsWith("cd") || cmd.startsWith("ls") || cmd.startsWith("cat") || cmd.startsWith("rm") ||
+                cmd.startsWith("sh") || cmd.startsWith("bash") || cmd.startsWith("su") ||
+                cmd.startsWith("pkg") || cmd.startsWith("git")) {
+            return "ODMÍTNUTO: QES Vault Console není Linux shell. Povoleny jsou jen QES příkazy z whitelistu. Zadej: help";
+        }
+
+        return "Neznámý příkaz: " + rawCommand + "\nZadej: help";
+    }
+
+    private String extractReportLine(String key) {
+        if (lastReport == null) return null;
+        String prefix = key + ":";
+        String[] lines = lastReport.split("\\R");
+        for (String line : lines) {
+            if (line != null && line.trim().startsWith(prefix)) return line.trim();
+        }
+        return null;
     }
 
     private String rustStatusQuiet() {
