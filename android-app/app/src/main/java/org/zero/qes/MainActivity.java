@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.4c-alpha";
-    private final String patchVersion = "P-2026-06-02-09C-QES-VAULT-OS-TERMINAL-VISIBLE";
+    private final String appVersion = "0.13.6-alpha";
+    private final String patchVersion = "P-2026-06-02-10-QES-COMMAND-REGISTRY";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1150,6 +1150,18 @@ public class MainActivity extends Activity {
         if (cmd.isEmpty()) cmd = "help";
         if (mutate) addLog("Vault command: " + cmd);
 
+        if ("commands".equals(cmd) || "command registry".equals(cmd) || "registry".equals(cmd) || "ai commands".equals(cmd)) {
+            return buildQesCommandRegistryText();
+        }
+
+        if ("command policy".equals(cmd) || "policy".equals(cmd)) {
+            return buildQesCommandPolicyText();
+        }
+
+        if ("ai manifest".equals(cmd) || "app manifest".equals(cmd) || "ai knowledge".equals(cmd)) {
+            return buildQesAiKnowledgeManifest();
+        }
+
         if ("boot".equals(cmd)) {
             return "QES VAULT OS BOOT\n"
                     + "STATUS: ONLINE\n"
@@ -1318,6 +1330,11 @@ public class MainActivity extends Activity {
         r4.addView(action("SELFTEST", v -> setVaultCommandAndRun("selftest")));
         content.addView(r4);
 
+        LinearLayout rCmd = row();
+        rCmd.addView(action("COMMANDS", v -> setVaultCommandAndRun("commands")));
+        rCmd.addView(action("AI MANIFEST", v -> setVaultCommandAndRun("ai manifest")));
+        content.addView(rCmd);
+
         LinearLayout r5 = row();
         r5.addView(action("REPORT", v -> setVaultCommandAndRun("show report")));
         r5.addView(action("CLEAR", v -> setVaultCommandAndRun("clear log")));
@@ -1354,6 +1371,9 @@ public class MainActivity extends Activity {
 
     private String proposeVaultCommand(String request) {
         String q = request == null ? "" : request.toLowerCase(Locale.ROOT);
+        if (q.contains("registry") || q.contains("příkaz") || q.contains("prikaz") || q.contains("commands")) return "commands";
+        if (q.contains("manifest") || q.contains("ai") || q.contains("zná") || q.contains("zna")) return "ai manifest";
+        if (q.contains("policy") || q.contains("pravidla") || q.contains("úroveň") || q.contains("uroven")) return "command policy";
         if (q.contains("verify") || q.contains("ověř") || q.contains("klic") || q.contains("klíč")) return "show verify_key";
         if (q.contains("report") || q.contains("mac") || q.contains("seal") || q.contains("peče")) return "show report";
         if (q.contains("security") || q.contains("bezpe") || q.contains("alcatraz") || q.contains("stav")) return "security status";
@@ -1389,6 +1409,18 @@ public class MainActivity extends Activity {
                     + "Zadej: help nebo api help";
         }
 
+        if ("commands".equals(cmd) || "command registry".equals(cmd) || "registry".equals(cmd) || "ai commands".equals(cmd)) {
+            return buildQesCommandRegistryText();
+        }
+
+        if ("command policy".equals(cmd) || "policy".equals(cmd)) {
+            return buildQesCommandPolicyText();
+        }
+
+        if ("ai manifest".equals(cmd) || "app manifest".equals(cmd) || "ai knowledge".equals(cmd)) {
+            return buildQesAiKnowledgeManifest();
+        }
+
         if ("boot".equals(cmd)) {
             return "QES VAULT OS BOOT\n"
                     + "STATUS: ONLINE\n"
@@ -1415,6 +1447,9 @@ public class MainActivity extends Activity {
                     + "clear log            - vyčistí interní log\n"
                     + "export report        - uloží poslední report\n"
                     + "api help             - interní QES API\n"
+                    + "commands             - centrální seznam příkazů\n"
+                    + "command policy       - bezpečnostní úrovně příkazů\n"
+                    + "ai manifest          - znalostní mapa AI\n"
                     + "api list             - seznam endpointů\n"
                     + "api call qes://app/info\n"
                     + "api call qes://security/status\n"
@@ -1538,6 +1573,109 @@ public class MainActivity extends Activity {
             if (line != null && line.trim().startsWith(prefix)) return line.trim();
         }
         return null;
+    }
+
+
+    private String[][] qesCommandRegistry() {
+        return new String[][]{
+                {"help", "PUBLIC", "NO", "NO", "Zobrazí nápovědu Vault OS."},
+                {"boot", "PUBLIC", "NO", "NO", "Zobrazí startovní stav Vault OS."},
+                {"app info", "PUBLIC", "NO", "NO", "Zobrazí verzi, patch, runtime a JNI stav."},
+                {"identity seal", "PUBLIC", "NO", "NO", "Zobrazí APK hash, 3x hash, podpis a release seal."},
+                {"security status", "PUBLIC", "NO", "NO", "Zobrazí App Shield, Alcatraz a bezpečnostní brány."},
+                {"commands", "PUBLIC", "NO", "NO", "Zobrazí centrální command registry."},
+                {"command policy", "PUBLIC", "NO", "NO", "Vysvětlí bezpečnostní úrovně příkazů."},
+                {"ai manifest", "PUBLIC", "NO", "NO", "Zobrazí znalostní mapu pro budoucí interní AI."},
+                {"api help", "PUBLIC", "NO", "NO", "Zobrazí interní qes:// API."},
+                {"api list", "PUBLIC", "NO", "NO", "Zobrazí povolené interní endpointy."},
+                {"show report", "VAULT", "YES", "NO", "Zobrazí poslední MAC/security report."},
+                {"show verify_key", "VAULT", "YES", "NO", "Vytáhne QES_VERIFY_KEY z posledního reportu."},
+                {"selftest", "VAULT", "NO", "YES", "Spustí Rust/JNI self-test."},
+                {"export report", "SENSITIVE", "YES", "YES", "Uloží poslední report přes Android dialog."},
+                {"clear log", "SENSITIVE", "NO", "YES", "Vyčistí interní log aplikace."},
+                {"file verify", "PLANNED", "YES", "YES", "Budoucí ověření QES souboru, MAC, hidden tagu a Zero Lock."},
+                {"vault lock", "PLANNED", "YES", "YES", "Budoucí zamčení Vaultu."},
+                {"vault unlock", "PLANNED", "NO", "YES", "Budoucí PIN/fráze/Keystore odemčení."},
+                {"seed vault", "PLANNED", "YES", "YES", "Budoucí AEAD seed records."},
+                {"network gate", "DANGEROUS_PLANNED", "YES", "YES", "Budoucí internet ON/OFF pouze na jednu doménu."},
+                {"encrypted upload", "DANGEROUS_PLANNED", "YES", "YES", "Budoucí odeslání pouze šifrovaného balíku."},
+                {"panic lock", "EMERGENCY_PLANNED", "YES", "YES", "Budoucí nouzové zamčení a vyčištění živého stavu."}
+        };
+    }
+
+    private String buildQesCommandRegistryText() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("QES COMMAND REGISTRY\n");
+        sb.append("ÚČEL: jeden centrální seznam příkazů, ze kterého bude vycházet VAULT OS i interní AI.\n\n");
+        sb.append("FORMÁT:\n");
+        sb.append("příkaz | level | vault | confirm | popis\n\n");
+
+        String[][] rows = qesCommandRegistry();
+        for (String[] r : rows) {
+            sb.append(r[0]).append(" | ")
+                    .append(r[1]).append(" | vault=")
+                    .append(r[2]).append(" | confirm=")
+                    .append(r[3]).append("\n")
+                    .append("  ").append(r[4]).append("\n\n");
+        }
+
+        sb.append("PRAVIDLO AI:\n");
+        sb.append("AI nesmí spouštět shell ani volné systémové příkazy. AI smí jen navrhnout příkaz z registry a uživatel ho musí potvrdit tlačítkem RUN.\n");
+        return sb.toString();
+    }
+
+    private String buildQesCommandPolicyText() {
+        return "QES COMMAND POLICY\n\n"
+                + "PUBLIC\n"
+                + "- dostupné i bez odemčeného Vaultu\n"
+                + "- nesmí odhalit hesla, seedy, plaintext ani skryté trasy\n\n"
+                + "VAULT\n"
+                + "- vyžaduje odemčený Vault nebo bude později vyžadovat Vault Unlock\n"
+                + "- může číst reporty a ověřovací informace\n\n"
+                + "SENSITIVE\n"
+                + "- mění stav, ukládá, exportuje nebo maže aplikační data\n"
+                + "- vždy vyžaduje potvrzení uživatele\n\n"
+                + "DANGEROUS_PLANNED\n"
+                + "- budoucí síťové nebo telefonní akce\n"
+                + "- defaultně zakázáno\n"
+                + "- povolit jen přes Network Gate a pouze na jednu uživatelem zvolenou doménu\n\n"
+                + "EMERGENCY_PLANNED\n"
+                + "- nouzové bezpečnostní akce typu panic lock\n"
+                + "- musí být jednoduché, rychlé a potvrzené podle nastavení\n\n"
+                + "ALCATRAZ RULE:\n"
+                + "Neexistuje otevřený Linux shell. Všechny akce jdou přes whitelist a qes:// interní API.";
+    }
+
+    private String buildQesAiKnowledgeManifest() {
+        return "QES AI KNOWLEDGE MANIFEST\n\n"
+                + "AI ROLE:\n"
+                + "- interní offline operátor za trezorem\n"
+                + "- zná příkazy aplikace\n"
+                + "- vysvětluje, co příkaz udělá\n"
+                + "- navrhuje příkaz do terminálu\n"
+                + "- nespouští citlivé akce bez RUN\n\n"
+                + "AI KNOWS:\n"
+                + "- Command Registry\n"
+                + "- App Identity Seal\n"
+                + "- Security Status\n"
+                + "- MAC / QES_VERIFY_KEY význam\n"
+                + "- budoucí File Verifier\n"
+                + "- budoucí AEAD Seed Vault\n"
+                + "- budoucí Network Gate\n"
+                + "- budoucí Design Engine\n\n"
+                + "AI MUST NOT:\n"
+                + "- číst nebo logovat PIN, frázi, seedy, hidden IV, route seed, XOR stavy\n"
+                + "- zapnout internet sama\n"
+                + "- odeslat data bez potvrzení\n"
+                + "- spustit shell\n"
+                + "- obejít Vault Lock\n\n"
+                + "NEXT MODULES:\n"
+                + "1. Vault Lock\n"
+                + "2. AEAD Seed Vault\n"
+                + "3. File Verifier\n"
+                + "4. Design Engine\n"
+                + "5. Network Gate\n"
+                + "6. AI Inner Vault";
     }
 
     private String rustStatusQuiet() {
