@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     private int amplitude = 9;
     private String artProfile = "ZERO GRID";
 
-    private final String appVersion = "0.13.6-alpha";
-    private final String patchVersion = "P-2026-06-02-10-QES-COMMAND-REGISTRY";
+    private final String appVersion = "0.13.8b-alpha";
+    private final String patchVersion = "P-2026-06-02-12B-QES-SEED-VAULT-BUTTON-FIX";
     private final String buildStage = "QES ALFA PROTOTYP";
 
     private String appMode = "NORMÁLNÍ";
@@ -1150,6 +1150,22 @@ public class MainActivity extends Activity {
         if (cmd.isEmpty()) cmd = "help";
         if (mutate) addLog("Vault command: " + cmd);
 
+        if ("seed vault".equals(cmd) || "seed vault status".equals(cmd) || "seed status".equals(cmd)) {
+            return buildQesSeedVaultStatusText();
+        }
+
+        if ("seed vault policy".equals(cmd) || "seed policy".equals(cmd)) {
+            return buildQesSeedVaultPolicyText();
+        }
+
+        if ("seed record format".equals(cmd) || "seed format".equals(cmd)) {
+            return buildQesSeedRecordFormatText();
+        }
+
+        if ("seed rotate plan".equals(cmd) || "seed rotation".equals(cmd) || "rotate seed".equals(cmd)) {
+            return buildQesSeedRotatePlanText();
+        }
+
         if ("commands".equals(cmd) || "command registry".equals(cmd) || "registry".equals(cmd) || "ai commands".equals(cmd)) {
             return buildQesCommandRegistryText();
         }
@@ -1340,6 +1356,27 @@ public class MainActivity extends Activity {
         r5.addView(action("CLEAR", v -> setVaultCommandAndRun("clear log")));
         content.addView(r5);
 
+
+        LinearLayout rQesForceVaultButtons1 = row();
+        rQesForceVaultButtons1.addView(action("COMMANDS", v -> setVaultCommandAndRun("commands")));
+        rQesForceVaultButtons1.addView(action("AI MANIFEST", v -> setVaultCommandAndRun("ai manifest")));
+        content.addView(rQesForceVaultButtons1);
+
+        LinearLayout rQesForceVaultButtons2 = row();
+        rQesForceVaultButtons2.addView(action("SEED VAULT", v -> setVaultCommandAndRun("seed vault")));
+        rQesForceVaultButtons2.addView(action("SEED POLICY", v -> setVaultCommandAndRun("seed vault policy")));
+        content.addView(rQesForceVaultButtons2);
+
+        LinearLayout rQesForceVaultButtons3 = row();
+        rQesForceVaultButtons3.addView(action("SEED FORMAT", v -> setVaultCommandAndRun("seed record format")));
+        rQesForceVaultButtons3.addView(action("SEED ROTATE", v -> setVaultCommandAndRun("seed rotate plan")));
+        content.addView(rQesForceVaultButtons3);
+
+        LinearLayout rQesForceVaultButtons4 = row();
+        rQesForceVaultButtons4.addView(action("IDENTITY SEAL", v -> setVaultCommandAndRun("identity seal")));
+        rQesForceVaultButtons4.addView(action("VAULT STATUS", v -> setVaultCommandAndRun("vault status")));
+        content.addView(rQesForceVaultButtons4);
+
         vaultAiChat = area("AI CHAT / návrhy příkazů");
         vaultAiChat.setMinLines(8);
         vaultAiChat.setText(
@@ -1407,6 +1444,22 @@ public class MainActivity extends Activity {
                     + "Příkaz: " + rawCommand + "\n\n"
                     + "Toto není Linux shell. Vault OS smí volat jen QES interní API a whitelist příkazy.\n"
                     + "Zadej: help nebo api help";
+        }
+
+        if ("seed vault".equals(cmd) || "seed vault status".equals(cmd) || "seed status".equals(cmd)) {
+            return buildQesSeedVaultStatusText();
+        }
+
+        if ("seed vault policy".equals(cmd) || "seed policy".equals(cmd)) {
+            return buildQesSeedVaultPolicyText();
+        }
+
+        if ("seed record format".equals(cmd) || "seed format".equals(cmd)) {
+            return buildQesSeedRecordFormatText();
+        }
+
+        if ("seed rotate plan".equals(cmd) || "seed rotation".equals(cmd) || "rotate seed".equals(cmd)) {
+            return buildQesSeedRotatePlanText();
         }
 
         if ("commands".equals(cmd) || "command registry".equals(cmd) || "registry".equals(cmd) || "ai commands".equals(cmd)) {
@@ -1676,6 +1729,45 @@ public class MainActivity extends Activity {
                 + "4. Design Engine\n"
                 + "5. Network Gate\n"
                 + "6. AI Inner Vault";
+    }
+
+
+    private String buildQesSeedVaultStatusText() {
+        return "QES AEAD SEED VAULT / SKELETON\n\n"
+                + "STATE: READY-SKELETON\n"
+                + "VAULT_LOCK: " + (vaultUnlocked ? "UNLOCKED" : "LOCKED") + "\n"
+                + "PATCH: " + patchVersion + "\n\n"
+                + "Seed Vault bude ukládat MAIN_SEED_A, MAIN_SEED_B, OLD_SEEDS, FILE_SEEDS a AI_SEED pouze jako AEAD seed records.\n"
+                + "Tento patch zatím neukládá reálné seedy, jen připravuje bezpečnostní strukturu.";
+    }
+
+    private String buildQesSeedVaultPolicyText() {
+        return "QES AEAD SEED VAULT POLICY\n\n"
+                + "Seed se nikdy neukládá čistě.\n"
+                + "Každý seed bude AEAD ciphertext + nonce + tag + associated data.\n"
+                + "Stavy: ACTIVE / OLD / REVOKED.\n"
+                + "ACTIVE se používá pro nové šifrování, OLD pro staré soubory, REVOKED jen pro recovery nebo vůbec.";
+    }
+
+    private String buildQesSeedRecordFormatText() {
+        return "QES AEAD SEED RECORD FORMAT\n\n"
+                + "seed_id\n"
+                + "seed_type: MAIN_SEED_A / MAIN_SEED_B / FILE_SEED / AI_SEED / GLYPH_SEED\n"
+                + "version\n"
+                + "status: ACTIVE / OLD / REVOKED\n"
+                + "nonce\n"
+                + "encrypted_seed\n"
+                + "tag\n"
+                + "aad: seed_id | seed_type | version | status | app_version | patch_version";
+    }
+
+    private String buildQesSeedRotatePlanText() {
+        return "QES SEED ROTATION PLAN\n\n"
+                + "Nový seed dostane ACTIVE.\n"
+                + "Starý seed přejde na OLD.\n"
+                + "Nové soubory používají ACTIVE.\n"
+                + "Staré soubory se otevírají přes seed_id / seed_version.\n"
+                + "Podezřelý seed bude REVOKED.";
     }
 
     private String rustStatusQuiet() {
